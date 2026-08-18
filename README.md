@@ -30,6 +30,33 @@ lsusb | grep 10a5:9201
 
 Output means yes. No output means this is the wrong driver for your hardware.
 
+The reader should identify itself like this:
+
+```
+Bus 003 Device 003: ID 10a5:9201 FPC FPC Sensor Controller L:0001 FW:021.26.2.031
+```
+
+### Which laptops have this sensor?
+
+The sensor is what matters, not the laptop model — if `lsusb` shows
+`10a5:9201`, this driver is for you regardless of what is in the table below.
+
+| Laptop | Status |
+|--------|--------|
+| Xiaomi Book Pro 14 (2022) | **Tested** — this is the development machine |
+| Other Xiaomi / RedmiBook models of the same generation | Plausible, untested |
+| Any other laptop reporting `10a5:9201` | Plausible, untested |
+
+Only the first row has been verified. Other models are widely *reported* to use
+the same FPC sensor, but this project has not run on them, so they are listed as
+plausible rather than supported. If you try one, please
+[report it](#reporting-a-result) — that is the single most useful contribution
+right now.
+
+Sensors that are **not** this one, including other FPC parts and the Goodix,
+Synaptics (`06cb:`) and Validity (`138a:`) readers common in ThinkPads and Dells,
+are unrelated to this driver and are not made to work by it.
+
 ## Install
 
 ```bash
@@ -129,6 +156,28 @@ being discarded. Rebuild with the current patch `04`, then confirm with
 A distinctive symptom of this specific bug: no prompt up front, but after a
 *failed* press you do see "Place your finger on the reader again". The retry
 message travels a different code path that is not affected.
+
+**The reader is not detected at all** — `lsusb | grep 10a5:9201` prints nothing.
+
+- Check that the fingerprint reader is **enabled in BIOS/UEFI**. A disabled
+  reader is invisible to the OS and looks identical to a broken one.
+- If the device appears intermittently, USB autosuspend is worth ruling out. It
+  is enabled by default (`/sys/bus/usb/devices/*/power/control` reads `auto`).
+  To disable it for this sensor only:
+
+  ```bash
+  echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="10a5", ATTR{idProduct}=="9201", ATTR{power/control}="on"' \
+      | sudo tee /etc/udev/rules.d/99-fpc9201-nosuspend.rules
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+  ```
+
+  This was not needed on the development machine — try it only if you actually
+  see the device dropping out.
+
+**Permission errors opening the device.** The installer's udev rule tags the
+device with `uaccess`, which grants access to the locally logged-in user on
+systemd distributions. Advice you may find elsewhere to add yourself to a
+`plugdev` group does not apply on Fedora, which has no such group.
 
 **Enrollment stalls or seems to ignore presses**
 
@@ -357,9 +406,38 @@ unrecognised press; template database is `0600`; `verify-install.sh` reports
 # Contributing
 
 Most valuable right now: **test reports from other distros and other laptop
-models.** Please include your distro and version, `lsusb | grep 10a5`, your
-OpenCV version, the output of `sudo ./scripts/verify-install.sh`, and any
-`match:` lines from the log.
+models.**
+
+## Reporting a result
+
+Whether it worked or not, please include:
+
+```bash
+# 1. Hardware and firmware
+lsusb -d 10a5:9201
+
+# 2. Distro and version
+cat /etc/os-release | head -2
+
+# 3. OpenCV version (the binary is coupled to its soname)
+pkg-config --modversion opencv4
+
+# 4. Install self-check
+sudo ./scripts/verify-install.sh
+
+# 5. What the matcher actually did
+sudo journalctl -u fprintd --since '-10min' | grep -E 'enroll:|match:'
+```
+
+Plus your laptop model and year, and whether login, `sudo`, and the on-screen
+prompt each worked. A report saying "works on model X" is enough to move a row in
+the compatibility table from plausible to tested.
+
+If the reader is not detected at all, check that fingerprint is enabled in
+BIOS/UEFI before filing anything — that accounts for a fair share of "dead
+sensor" reports.
+
+## Upstreaming
 
 These patches are intended for upstream. A fork fragments an already-niche
 driver, so the goal is to get the fixes into

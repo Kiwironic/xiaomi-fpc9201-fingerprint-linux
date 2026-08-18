@@ -9,13 +9,29 @@ sensor, or picking up this work.
 Bus 003 Device 003: ID 10a5:9201 FPC FPC Sensor Controller L:0001 FW:021.26.2.031
 ```
 
+Verified from the USB descriptor on the development machine:
+
+| Field | Value |
+|-------|-------|
+| USB ID | `10a5:9201` |
+| `iManufacturer` | `FPC` |
+| `iProduct` | `FPC Sensor Controller L:0001 FW:021.26.2.031` |
+| `iConfiguration` | `FPC Sensor Controller` |
+| `bcdDevice` | 2.31 (daemon logs it as `Version 21.26.2.31`) |
+| `bcdUSB` | 1.10 — the device declares USB 1.1, though the port negotiates 480 Mbps |
+| Interface class | 255/255/255, vendor specific |
+| Endpoints | 1 — bulk IN `0x82`, 64-byte packets |
+| Power | bus powered, 100 mA |
+
 - Reported vendor string is **FPC**, but the driver family is Chipsailing;
   upstream `libfprint` carries an unrelated `cs9711` driver, which does **not**
   work here.
-- Firmware seen on the tested unit: `021.26.2.031`, reported by the daemon as
-  `Version 21.26.2.31`.
-- Stock `libfprint` has **no support** for this device. Nothing you install from
-  your distro repos will drive it.
+- Stock `libfprint` has **no support** for this device — neither `10a5` nor
+  `9201` appears anywhere in `libfprint-2.so`. Nothing you install from your
+  distro repos will drive it.
+- Beware third-party descriptions claiming a **192×192** sensor. The real frame
+  is **112×88** (9856 bytes); the driver asserts exactly that size on every
+  read.
 
 ## Why not a kernel module
 
