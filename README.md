@@ -378,7 +378,8 @@ failed match is a *normal* outcome and returns `false`.
 
 **Verified** on Fedora 44 with a Xiaomi Book Pro 14 2022: clean build with no
 missing libraries; enrollment completes; verification matches comfortably above
-the threshold; fingerprint login works at the GNOME login screen; the prompt
+the threshold; fingerprint login works at the GNOME login screen and the
+`(or place finger on reader)` hint appears under the password field; the prompt
 appears in a terminal for `sudo` and the retry message appears after an
 unrecognised press; template database is `0600`; `verify-install.sh` reports
 18/18.
@@ -391,9 +392,6 @@ unrecognised press; template database is `0600`; `verify-install.sh` reports
   confirmed present in at least one other model (see
   [compatibility](#which-laptops-have-this-sensor)), but this driver has not been
   run there yet.
-- The GNOME lock-screen hint text specifically. The prompt mechanism it depends
-  on is confirmed working at the PAM layer and in a terminal, so it is expected
-  to appear, but the lock screen itself has not been checked visually.
 
 **Known limitations:**
 
