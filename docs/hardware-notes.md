@@ -33,6 +33,17 @@ Verified from the USB descriptor on the development machine:
   is **112×88** (9856 bytes); the driver asserts exactly that size on every
   read.
 
+### Confirmed sightings of this sensor
+
+| Laptop | Distro reported | Source |
+|--------|-----------------|--------|
+| Xiaomi Book Pro 14 2022 (TIMI) | Fedora 44 | development machine |
+| RedmiBook Pro 15 2022 | Arch | user report, sensor string `FPC Sensor Controller L:0001 (10a5:9201)` |
+
+Only the first has had this driver run on it. The second confirms the hardware is
+shared across models, which is the useful part — the USB ID is what determines
+compatibility, not the chassis.
+
 ## Why not a kernel module
 
 The sensor is a plain USB device requiring an encrypted, TLS-like handshake

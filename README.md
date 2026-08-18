@@ -41,17 +41,23 @@ Bus 003 Device 003: ID 10a5:9201 FPC FPC Sensor Controller L:0001 FW:021.26.2.03
 The sensor is what matters, not the laptop model — if `lsusb` shows
 `10a5:9201`, this driver is for you regardless of what is in the table below.
 
-| Laptop | Status |
-|--------|--------|
-| Xiaomi Book Pro 14 (2022) | **Tested** — this is the development machine |
-| Other Xiaomi / RedmiBook models of the same generation | Plausible, untested |
-| Any other laptop reporting `10a5:9201` | Plausible, untested |
+| Laptop | Sensor confirmed | This driver tested |
+|--------|------------------|--------------------|
+| Xiaomi Book Pro 14 (2022) | Yes | **Yes** — development machine, Fedora 44 |
+| RedmiBook Pro 15 (2022) | Yes — reported as `FPC Sensor Controller L:0001 (10a5:9201)` ([#1](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1), Arch) | Not yet |
+| Other Xiaomi / RedmiBook models of the same generation | Likely, unconfirmed | Not yet |
+| Any other laptop reporting `10a5:9201` | By definition | Not yet |
 
-Only the first row has been verified. Other models are widely *reported* to use
-the same FPC sensor, but this project has not run on them, so they are listed as
-plausible rather than supported. If you try one, please
-[report it](#reporting-a-result) — that is the single most useful contribution
-right now.
+"Sensor confirmed" means someone has posted the matching USB identification
+string. "This driver tested" means the driver has actually been run there and the
+result reported — so far only the development machine. If you try another model,
+please [report it](#reporting-a-result); that is the single most useful
+contribution right now.
+
+Note that the RedmiBook Pro 15 report was filed against an earlier, unrelated
+kernel-module attempt that could not work for this sensor at all. It says nothing
+about whether *this* driver works there — the hardware is the same, so it very
+plausibly does.
 
 Sensors that are **not** this one, including other FPC parts and the Goodix,
 Synaptics (`06cb:`) and Validity (`138a:`) readers common in ThinkPads and Dells,
@@ -381,7 +387,10 @@ unrecognised press; template database is `0600`; `verify-install.sh` reports
 
 - **Any distro other than Fedora.** Debian/Ubuntu/Arch/openSUSE package mappings
   are written but untested. Reports welcome.
-- **Any hardware other than `10a5:9201`**, on one laptop model.
+- **Any laptop other than the Xiaomi Book Pro 14 2022.** The same sensor is
+  confirmed present in at least one other model (see
+  [compatibility](#which-laptops-have-this-sensor)), but this driver has not been
+  run there yet.
 - The GNOME lock-screen hint text specifically. The prompt mechanism it depends
   on is confirmed working at the PAM layer and in a terminal, so it is expected
   to appear, but the lock screen itself has not been checked visually.
