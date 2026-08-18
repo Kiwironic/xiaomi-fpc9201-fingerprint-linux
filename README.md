@@ -60,7 +60,7 @@ are unrelated to this driver and are not made to work by it.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/xiaomi-fpc9201-fingerprint-linux.git
+git clone https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux.git
 cd xiaomi-fpc9201-fingerprint-linux
 sudo ./install.sh
 ./scripts/enroll.sh
