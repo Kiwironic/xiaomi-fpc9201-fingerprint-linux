@@ -1,0 +1,124 @@
+diff --git a/src/drv_fpc/fpc9201.cpp b/src/drv_fpc/fpc9201.cpp
+index 00a0b34..9b449ca 100644
+--- a/src/drv_fpc/fpc9201.cpp
++++ b/src/drv_fpc/fpc9201.cpp
+@@ -229,6 +229,11 @@ protected:
+             _device_state->_finger_present = true;
+             
+         } else if (event._type == FPCEvent::FPP_Image) {
++            // The image has been captured, so the finger is no longer being
++            // read. The hardware gives us no FingerUp event, so _finger_present
++            // would otherwise latch true forever after the first press and the
++            // D-Bus property would always report a finger on the sensor.
++            _device_state->_finger_present = false;
+             std::vector<unsigned char> pixels{};
+             pixels.reserve(10000);
+             size_t skip = 12;
+@@ -293,6 +298,10 @@ protected:
+             auto ret = _fingerprint.merge(partial);
+ 
+             if (not ret) {
++                // Could not align this press with what has been collected so
++                // far. Normal when the finger moved too far or the press was
++                // too light - logged so a stalled enrollment is diagnosable.
++                std::cout << "enroll: merge failed (reposition finger)" << std::endl;
+                 return send_signal("enroll-remove-and-retry", FALSE);
+             }
+             
+@@ -302,7 +311,10 @@ protected:
+ 
+             auto rate =  (double)num_pixels / min_area;
+ 
+-            std::cout << rate << std::endl;
++            std::cout << "enroll: progress=" << rate
++                      << " area=" << num_pixels
++                      << "/" << min_area
++                      << std::endl;
+ 
+             if (num_pixels < min_area) {
+                 int current_stage = (int)(rate * 10);
+@@ -312,7 +324,7 @@ protected:
+                 }
+                 return send_signal("enroll-remove-and-retry", FALSE);
+             }
+-            std::cout << "completed" << std::endl;
++            std::cout << "enroll: completed" << std::endl;
+             _storage->insert_or_update(std::move(_fingerprint));
+             _storage->save();
+             return send_signal("enroll-completed", TRUE);
+@@ -480,6 +492,10 @@ class WorkerDevice : public AsyncDBusObject {
+ 
+     DeviceState _device_state{};
+ 
++    // Finger name to report in VerifyFingerSelected, held across the await on
++    // the VerifyStart method return (see enroll_verify_start).
++    std::string _verify_finger_selected{};
++
+     AsyncDBusSend _send_message{};
+     AsyncDBusSendWithReply _send_with_reply{};
+     Queue<std::queue<FPCEvent>>::Put _put_image{};
+@@ -923,12 +939,64 @@ protected:
+             _storage,
+             is_verify);
+ 
++        // VerifyFingerSelected must be emitted for a prompt to appear anywhere:
++        // pam_fprintd uses it to produce the PAM info message "Place your
++        // finger on <device>", and GNOME Shell turns that message into the
++        // "(or place finger on reader)" hint under the password field.
++        // Upstream declared the signal in the interface above and never sent
++        // it, so verification worked while the reader looked dead.
++        //
++        // ORDERING IS PART OF THE CONTRACT. pam_fprintd calls VerifyStart
++        // asynchronously and only sets its internal `verify_started` flag in
++        // the method-return callback. Its VerifyFingerSelected handler starts
++        // with:
++        //
++        //     if (!data->verify_started) { "Unexpected ... signal"; return 0; }
++        //
++        // so a signal that reaches the client BEFORE the method return is
++        // parsed, logged as unexpected, and dropped - no PAM message, no GNOME
++        // hint. Emitting it first therefore looks correct on the wire and still
++        // produces no prompt.
++        //
++        // Both the reply and the signal go out via dbus_connection_send(),
++        // which appends to a single ordered outgoing queue, and D-Bus preserves
++        // per-sender ordering. So the reply is awaited first and the signal is
++        // emitted from the continuation below, guaranteeing the client sees
++        // return-then-signal.
+         AsyncDBusMessage reply{
+             dbus_message_new_method_return(get_message())
+         };
++
++        if (is_verify) {
++            _verify_finger_selected = finger_name;
++            return *this
++                / _send_message(_connection, reply)
++                / &WorkerDevice::send_verify_finger_selected;
++        }
++
+         return *this / _send_message(_connection, reply) / &WorkerDevice::run;
+     }
+ 
++    // Continuation of enroll_verify_start() for the verify case: runs only
++    // after the VerifyStart method return has been queued, so pam_fprintd has
++    // already set verify_started by the time this signal reaches it.
++    Async send_verify_finger_selected() {
++        AsyncDBusMessage finger_signal{
++            dbus_message_new_signal(
++                _dbus_path.c_str(),
++                "net.reactivated.Fprint.Device",
++                "VerifyFingerSelected")
++        };
++        if (finger_signal == nullptr) {
++            return run();
++        }
++        const char* finger_name = _verify_finger_selected.c_str();
++        DBusMessageIter sig_iter{};
++        dbus_message_iter_init_append(finger_signal, &sig_iter);
++        dbus_message_iter_append_basic(&sig_iter, DBUS_TYPE_STRING, &finger_name);
++        return *this / _send_message(_connection, finger_signal) / &WorkerDevice::run;
++    }
++
+     Async enroll_verify_stop() {
+         if (_enroll_verify_task == nullptr) {
+             AsyncDBusMessage reply{

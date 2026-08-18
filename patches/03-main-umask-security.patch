@@ -1,0 +1,17 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index 6e4e94d..0bf082c 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -54,7 +54,11 @@ const std::array<Argument, 6> arguments
+ 
+ int main(int argc, const char* argv[])
+ {
+-    ::umask(0600);
++    // umask() takes the permission bits to REMOVE, not to keep. The original
++    // umask(0600) therefore stripped owner rw and left group/other write set,
++    // creating the fingerprint template database world-writable (mode 066).
++    // 0077 is what was meant: owner-only (0600) for new files.
++    ::umask(0077);
+ 
+     openlog(argv[0], LOG_PID | LOG_NDELAY, LOG_AUTH | LOG_INFO);
+     syslog(LOG_AUTH | LOG_INFO, "fingerpp starting");

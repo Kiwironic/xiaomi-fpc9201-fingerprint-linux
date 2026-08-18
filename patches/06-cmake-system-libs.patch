@@ -1,0 +1,27 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index dfa13aa..54b6d83 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,7 +1,8 @@
+ cmake_minimum_required(VERSION 3.13)
+ 
+-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake)
+-set(LIBEVENT_FIND_PACKAGE ON)
++# Use system libraries (Fedora) instead of vcpkg toolchain
++# Fedora's libevent-devel has no CMake config, so use pkg-config (LIBEVENT_FIND_PACKAGE OFF)
++set(LIBEVENT_FIND_PACKAGE OFF)
+ 
+ project(fingerprint-ocv)
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 050d156..e22462a 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -14,7 +14,6 @@ if (DEFINED ENV{OPENCV_SDK_HOME})
+ set(OpenCV_DIR $ENV{OPENCV_SDK_HOME}/lib/cmake/opencv4)
+ endif()
+ 
+-set(OpenCV_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-linux/share/opencv4")
+ find_package(OpenCV REQUIRED)
+ 
+ add_library(cvext STATIC cvext.cpp)

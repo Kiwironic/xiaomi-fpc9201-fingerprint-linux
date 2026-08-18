@@ -1,0 +1,90 @@
+diff --git a/src/drv_fpc/fingerprint.cpp b/src/drv_fpc/fingerprint.cpp
+index 1677bd7..10496cb 100644
+--- a/src/drv_fpc/fingerprint.cpp
++++ b/src/drv_fpc/fingerprint.cpp
+@@ -18,6 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ #include <fstream>
+ #include <iostream>
+ 
++#include <sys/stat.h>
++#include <unistd.h>
++
+ #include <openssl/aes.h>
+ #include <openssl/evp.h>
+ #include <opencv2/imgproc.hpp>
+@@ -120,8 +123,14 @@ void FingerprintStorage::load()
+     if (file == nullptr) {
+         return;
+     }
+-    fread(encrypted.data(), encrypted.size(), 1, file);
++    // Check the read actually succeeded - a short read left the buffer partly
++    // uninitialised and was then handed to the AEAD decrypt.
++    bool read_ok = fread(encrypted.data(), encrypted.size(), 1, file) == 1;
+     fclose(file);
++    if (not read_ok) {
++        jinx_log_error() << "read " << _filename << " failed or truncated";
++        return;
++    }
+ 
+     jinx::SliceConst key{_key.data(), _key.size()};
+     jinx::SliceConst nonce{_key.data(), 12};
+@@ -182,12 +191,55 @@ void FingerprintStorage::save()
+         {encrypted.data(), data.size()},
+         {encrypted.data() + data.size(), 16});
+ 
+-    FILE* file = fopen(_filename.c_str(), "wb");
++    // Write atomically: serialise to a temporary file, fsync it, then rename
++    // over the real one. The original opened the live database with "wb", which
++    // truncates in place - a crash or power loss mid-write left a truncated
++    // file, i.e. every enrolled fingerprint for every user silently lost.
++    // rename(2) within the same directory is atomic, so the database is either
++    // the old version or the new one, never a partial write.
++    std::string tmp_filename = _filename + ".tmp";
++
++    FILE* file = fopen(tmp_filename.c_str(), "wb");
+     if (file == nullptr) {
+-        jinx_log_error() << "write " << _filename << " failed: " << strerror(errno);
++        // The original logged this and then called fwrite/fclose on the null
++        // pointer, crashing the daemon on any write failure (read-only mount,
++        // full disk, bad permissions).
++        jinx_log_error() << "write " << tmp_filename << " failed: " << strerror(errno);
++        return;
++    }
++
++    bool ok = fwrite(encrypted.data(), encrypted.size(), 1, file) == 1;
++    if (not ok) {
++        jinx_log_error() << "write " << tmp_filename << " failed: " << strerror(errno);
++    }
++
++    // Force to disk before the rename, otherwise the rename can land while the
++    // contents are still only in the page cache.
++    if (ok and (fflush(file) != 0 or fsync(fileno(file)) != 0)) {
++        jinx_log_error() << "fsync " << tmp_filename << " failed: " << strerror(errno);
++        ok = false;
++    }
++
++    if (fclose(file) != 0 and ok) {
++        jinx_log_error() << "close " << tmp_filename << " failed: " << strerror(errno);
++        ok = false;
++    }
++
++    if (not ok) {
++        ::unlink(tmp_filename.c_str());
++        return;
++    }
++
++    // Match the intended 0600 before the file becomes the live database, so
++    // there is no window where it is readable by others.
++    if (::chmod(tmp_filename.c_str(), S_IRUSR | S_IWUSR) != 0) {
++        jinx_log_error() << "chmod " << tmp_filename << " failed: " << strerror(errno);
++    }
++
++    if (::rename(tmp_filename.c_str(), _filename.c_str()) != 0) {
++        jinx_log_error() << "rename to " << _filename << " failed: " << strerror(errno);
++        ::unlink(tmp_filename.c_str());
+     }
+-    fwrite(encrypted.data(), encrypted.size(), 1, file);
+-    fclose(file);
+ }
+ 
+ void FingerprintStorage::init(const std::string &filename, const std::vector<unsigned char>& key)

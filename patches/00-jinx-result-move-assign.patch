@@ -1,0 +1,15 @@
+diff --git a/include/jinx/result.hpp b/include/jinx/result.hpp
+index f2af18b..fe2dbbe 100644
+--- a/include/jinx/result.hpp
++++ b/include/jinx/result.hpp
+@@ -73,7 +73,10 @@ public:
+         _empty = other._empty;
+ #endif
+         _value = other._value;
++#if !defined(NDEBUG) && !defined(JINX_RESULT_NO_CHECK)
+         other._empty = true;
++#endif
++        return *this;
+     }
+ 
+     JINX_NO_COPY(Result);

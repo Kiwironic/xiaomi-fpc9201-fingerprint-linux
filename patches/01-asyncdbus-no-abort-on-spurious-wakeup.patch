@@ -1,0 +1,18 @@
+diff --git a/include/jinx/dbus/dbus.hpp b/include/jinx/dbus/dbus.hpp
+index cc77729..6fe3a5e 100644
+--- a/include/jinx/dbus/dbus.hpp
++++ b/include/jinx/dbus/dbus.hpp
+@@ -433,8 +433,11 @@ protected:
+             return async_suspend();
+         }
+         if (dbus_pending_call_get_completed(_call) == FALSE) {
+-            // TODO raise error
+-            ::abort();
++            // Spurious wakeup: the task was resumed before libdbus marked the
++            // pending call complete. Aborting here took the whole daemon down
++            // (and with it fprintd/PAM). Just go back to sleep; the notify
++            // callback will resume us again when the reply really lands.
++            return async_suspend();
+         }
+         emplace_result(dbus_pending_call_steal_reply(_call));
+         return async_return();

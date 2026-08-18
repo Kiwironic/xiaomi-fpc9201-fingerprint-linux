@@ -1,0 +1,19 @@
+# Compiled / build output
+build/
+*.o
+*.so
+*.a
+__pycache__/
+*.pyc
+
+# Editors
+*.swp
+*~
+.vscode/
+.idea/
+# Office-suite lock files - these embed the local username and hostname
+.~lock.*#
+
+# Local logs and scratch
+*.log
+/tmp/
