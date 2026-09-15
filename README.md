@@ -427,7 +427,7 @@ lsusb -d 10a5:9201
 cat /etc/os-release | head -2
 
 # 3. OpenCV version (the binary is coupled to its soname)
-pkg-config --modversion opencv4
+pkg-config --modversion opencv4 || pkg-config --modversion opencv5
 
 # 4. Install self-check
 sudo ./scripts/verify-install.sh
