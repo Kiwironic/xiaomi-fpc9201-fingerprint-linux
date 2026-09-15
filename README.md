@@ -291,10 +291,10 @@ into one wide template; verification aligns a single press against it.
 # The fixes in detail
 
 Eight bugs — seven diagnosed against real hardware, plus an authorization gap
-reported by a user ([#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)).
-Note
-that fault 4's second half was introduced by *this* project's first attempt at
-fixing the first half — the failure modes here are subtle.
+reported by a user
+([#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)).
+Note that fault 4's second half was introduced by *this* project's first
+attempt at fixing the first half — the failure modes here are subtle.
 
 | # | Fault | Symptom | Patch |
 |---|-------|---------|-------|
@@ -424,6 +424,9 @@ work ([#1 comment](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux
 - Image-based matching is inherently weaker than a match-on-chip sensor.
   Reasonable for convenience; consider that before relying on it for anything
   sensitive.
+- Enrolling or deleting prints as a non-root user needs a polkit agent to
+  answer the password prompt (patch `08`). On a session with no agent — e.g.
+  plain SSH — the call is denied; use `sudo`, which needs no prompt.
 - Templates are encrypted with a key derived in-driver, not tied to a TPM.
 
 ---
