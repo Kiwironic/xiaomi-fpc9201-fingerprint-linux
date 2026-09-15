@@ -144,6 +144,14 @@ if [ -x "$DEST" ]; then
     else
         bad "VerifyFingerSelected absent - unpatched build; no auth prompt will appear"
     fi
+    # Patch 08: enroll/delete must go through polkit CheckAuthorization.
+    # Without it any local user can add or remove prints with no prompt.
+    if grep -q 'net.reactivated.fprint.device.enroll' "$_strings_tmp"; then
+        ok "binary gates enroll/delete behind polkit"
+    else
+        bad "polkit check absent - unpatched build; enroll/delete need no authentication"
+        echo "         Rebuild with current patch 08: sudo ./install.sh"
+    fi
     rm -f "$_strings_tmp"
     # The string being present only proves the interface declares it. Upstream
     # declared it and never emitted it, which is exactly the bug. And emitting

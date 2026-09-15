@@ -20,6 +20,7 @@ they are all intended to land upstream rather than live in a fork.
 | `05-fingerprint-atomic-save` | `src/drv_fpc/fingerprint.cpp` | **data loss** | `save()` dereferenced NULL on `fopen` failure and truncated the live DB in place; now temp-file + `fsync` + atomic `rename`. Also checks `fread` |
 | `06-cmake-system-libs` | `CMakeLists.txt`, `src/CMakeLists.txt` | build | Build against system OpenCV/libevent instead of vcpkg |
 | `07-opencv5-module-names` | `src/CMakeLists.txt` | build | OpenCV 5 renamed the `features2d` and `calib3d` modules to `features` and `calib`, so the hardcoded link names failed with `cannot find -lopencv_features2d`. Selects the right names via `OpenCV_VERSION_MAJOR`, keeping OpenCV 4 working |
+| `08-polkit-authorization` | `src/drv_fpc/fpc9201.cpp` | **security** | No authorization check on enroll/delete — any local user could add or remove fingerprints with no prompt. Now calls polkit `CheckAuthorization` for `net.reactivated.fprint.device.enroll` (stock fprintd's `auth_self_keep` action), failing closed. Root stays authorized, so `sudo fprintd-enroll` is unaffected |
 
 ## Patch 04 and signal ordering
 
@@ -68,7 +69,7 @@ enrolled finger is therefore unnecessary; ordering was the whole problem.
 
 ## Applying manually
 
-Patches `02`–`06` apply at the repo root. Patches `00` and `01` target
+Patches `02`–`08` apply at the repo root. Patches `00` and `01` target
 submodules and **must** be applied from inside the submodule directory — a
 single top-level `git apply patches/*.patch` fails with
 `No such file or directory` on those paths.
@@ -77,7 +78,7 @@ single top-level `git apply patches/*.patch` fails with
 cd /usr/local/src/fingerprint-ocv
 P=/path/to/this/repo/patches
 
-git apply "$P"/0{2,3,4,5,6}-*.patch
+git apply "$P"/0{2,3,4,5,6,7,8}-*.patch
 git -C asyncdbus apply "$P"/01-*.patch
 git -C jinx      apply "$P"/00-*.patch
 ```
@@ -98,6 +99,7 @@ grep -q 'homography_is_sane'   src/cvext.cpp            || echo "MATCHING FIX MI
 grep -q 'VerifyFingerSelected' src/drv_fpc/fpc9201.cpp  || echo "PROMPT FIX MISSING"
 grep -q 'send_verify_finger_selected' src/drv_fpc/fpc9201.cpp \
     || echo "PROMPT ORDERING FIX MISSING (signal emitted too early; PAM drops it)"
+grep -q 'CheckAuthorization'        src/drv_fpc/fpc9201.cpp  || echo "POLKIT FIX MISSING"
 ```
 
 The last check matters: a build can contain `VerifyFingerSelected` and still

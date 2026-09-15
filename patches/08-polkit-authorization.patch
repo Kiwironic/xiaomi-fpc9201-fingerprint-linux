@@ -1,0 +1,147 @@
+diff --git a/src/drv_fpc/fpc9201.cpp b/src/drv_fpc/fpc9201.cpp
+index 9b449ca..ca3af38 100644
+--- a/src/drv_fpc/fpc9201.cpp
++++ b/src/drv_fpc/fpc9201.cpp
+@@ -680,6 +680,121 @@ protected:
+         return AsyncDBusObject::handle_message();
+     }
+ 
++    // Gate state-changing methods through polkit. The uid/claim checks above
++    // prove only that the caller is who they claim to be - any local user
++    // could enroll or delete their own fingerprints from an unattended
++    // session with no prompt at all. Stock fprintd asks polkit before these
++    // same operations via the "net.reactivated.fprint.device.enroll" action
++    // (auth_self_keep: re-enter your own password), so this restores the
++    // standard contract using the policy file every distro's fprintd package
++    // already ships. Root is always authorised, so the documented
++    // `sudo fprintd-enroll` flow keeps working without a prompt.
++    Async check_polkit() {
++        auto& msg = get_message();
++        const char* sender = dbus_message_get_sender(msg);
++        if (sender == nullptr) {
++            AsyncDBusMessage reply{
++                dbus_message_new_error(msg, "net.reactivated.Fprint.Error.PermissionDenied", "no sender")
++            };
++            return *this / _send_message(_connection, reply) / &WorkerDevice::run;
++        }
++
++        AsyncDBusMessage call{
++            dbus_message_new_method_call(
++                "org.freedesktop.PolicyKit1",
++                "/org/freedesktop/PolicyKit1/Authority",
++                "org.freedesktop.PolicyKit1.Authority",
++                "CheckAuthorization")
++        };
++        if (call == nullptr) {
++            AsyncDBusMessage reply{
++                dbus_message_new_error(msg, "net.reactivated.Fprint.Error.Internal", "out of memory")
++            };
++            return *this / _send_message(_connection, reply) / &WorkerDevice::run;
++        }
++
++        // CheckAuthorization(subject (sa{sv}), action_id s, details a{ss},
++        //                    flags u, cancellation_id s)
++        DBusMessageIter args{};
++        dbus_message_iter_init_append(call, &args);
++
++        // subject = ("system-bus-name", {"name": <sender unique name>})
++        {
++            DBusMessageIter subject{}, dict{}, entry{}, variant{};
++            const char* kind = "system-bus-name";
++            const char* key = "name";
++            dbus_message_iter_open_container(&args, DBUS_TYPE_STRUCT, nullptr, &subject);
++            dbus_message_iter_append_basic(&subject, DBUS_TYPE_STRING, &kind);
++            dbus_message_iter_open_container(&subject, DBUS_TYPE_ARRAY, "{sv}", &dict);
++            dbus_message_iter_open_container(&dict, DBUS_TYPE_DICT_ENTRY, nullptr, &entry);
++            dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &key);
++            dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "s", &variant);
++            dbus_message_iter_append_basic(&variant, DBUS_TYPE_STRING, &sender);
++            dbus_message_iter_close_container(&entry, &variant);
++            dbus_message_iter_close_container(&dict, &entry);
++            dbus_message_iter_close_container(&subject, &dict);
++            dbus_message_iter_close_container(&args, &subject);
++        }
++
++        const char* action_id = "net.reactivated.fprint.device.enroll";
++        dbus_message_iter_append_basic(&args, DBUS_TYPE_STRING, &action_id);
++
++        {
++            DBusMessageIter details{};
++            dbus_message_iter_open_container(&args, DBUS_TYPE_ARRAY, "{ss}", &details);
++            dbus_message_iter_close_container(&args, &details);
++        }
++
++        // flags: 1 = AllowUserInteraction, required for a prompt to appear
++        dbus_uint32_t flags = 1;
++        dbus_message_iter_append_basic(&args, DBUS_TYPE_UINT32, &flags);
++
++        const char* cancellation_id = "";
++        dbus_message_iter_append_basic(&args, DBUS_TYPE_STRING, &cancellation_id);
++
++        // The reply is sent only after the user answers the agent prompt, so
++        // this needs much longer than the usual bus timeout.
++        return *this
++            / _send_with_reply(_connection, call, std::chrono::seconds(120))
++            / &WorkerDevice::check_polkit_done;
++    }
++
++    Async check_polkit_done() {
++        auto& msg = get_message();
++        auto& reply = _send_with_reply.get_result();
++
++        // Reply is (is_authorized b, is_challenge b, details a{ss}). Fail
++        // closed: missing polkit, a timed-out or malformed reply, and an
++        // explicit denial all take the same path.
++        bool authorized = false;
++        if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_METHOD_RETURN) {
++            DBusMessageIter iter{}, result{};
++            if (dbus_message_iter_init(reply, &iter) == TRUE
++                and dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_STRUCT) {
++                dbus_message_iter_recurse(&iter, &result);
++                if (dbus_message_iter_get_arg_type(&result) == DBUS_TYPE_BOOLEAN) {
++                    dbus_bool_t v = FALSE;
++                    dbus_message_iter_get_basic(&result, &v);
++                    authorized = (v == TRUE);
++                }
++            }
++        }
++
++        if (not authorized) {
++            AsyncDBusMessage err{
++                dbus_message_new_error(msg, "net.reactivated.Fprint.Error.PermissionDenied", "not authorized")
++            };
++            return *this / _send_message(_connection, err) / &WorkerDevice::run;
++        }
++
++        // Authorised - continue through the normal per-method gate.
++        const auto* method = dbus_message_get_member(msg);
++        if (jinx::hash::hash_string(method) == jinx::hash::hash_string("DeleteEnrolledFingers")) {
++            return get_uid();
++        }
++        return check_sender();
++    }
++
+     Async handle_message() override {
+         auto& msg = get_message();
+         const auto* method = dbus_message_get_member(msg);
+@@ -690,15 +805,16 @@ protected:
+ 
+         switch(method_key) {
+             case "ListEnrolledFingers"_hash:
+-            case "DeleteEnrolledFingers"_hash:
+             case "Claim"_hash:
+                 return get_uid();
+-            case "EnrollStop"_hash:
+             case "EnrollStart"_hash:
+-            case "VerifyStop"_hash:
+-            case "VerifyStart"_hash:
+             case "DeleteEnrolledFinger"_hash:
++            case "DeleteEnrolledFingers"_hash:
+             case "DeleteEnrolledFingers2"_hash:
++                return check_polkit();
++            case "EnrollStop"_hash:
++            case "VerifyStop"_hash:
++            case "VerifyStart"_hash:
+             case "Release"_hash:
+                 return check_sender();
+             default: break;

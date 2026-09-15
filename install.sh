@@ -104,7 +104,7 @@ install_deps() {
             warn "Unrecognised distro '$DISTRO'. Install these yourself:"
             warn "  a C++17 compiler, cmake, make, git, pkg-config,"
             warn "  and dev packages for: libusb-1.0, libevent, dbus-1,"
-            warn "  openssl, opencv4, plus fprintd and its PAM module."
+            warn "  openssl, opencv (4 or 5), plus fprintd and its PAM module."
             warn "Then re-run with --skip-deps."
             die "cannot auto-install dependencies on this distro"
             ;;
@@ -168,6 +168,7 @@ apply_patch "$SRC_DIR"           "$P/04-fpc9201-signal-and-logging.patch"
 apply_patch "$SRC_DIR"           "$P/05-fingerprint-atomic-save.patch"
 apply_patch "$SRC_DIR"           "$P/06-cmake-system-libs.patch"
 apply_patch "$SRC_DIR"           "$P/07-opencv5-module-names.patch"
+apply_patch "$SRC_DIR"           "$P/08-polkit-authorization.patch"
 apply_patch "$SRC_DIR/asyncdbus" "$P/01-asyncdbus-no-abort-on-spurious-wakeup.patch"
 apply_patch "$SRC_DIR/jinx"      "$P/00-jinx-result-move-assign.patch"
 
@@ -192,6 +193,10 @@ if [ "$DRY_RUN" = 0 ]; then
     # without this the link step fails with "cannot find -lopencv_features2d".
     grep -q 'OPENCV_FEATURES2D_LIB' "$SRC_DIR/src/CMakeLists.txt" \
         && echo "  ok: opencv5 module names" || { echo "  MISSING: opencv5 fix"; fail=1; }
+    # Without this, any local user can enroll or delete fingerprints with no
+    # authentication prompt at all.
+    grep -q 'CheckAuthorization' "$SRC_DIR/src/drv_fpc/fpc9201.cpp" \
+        && echo "  ok: polkit authorization" || { echo "  MISSING: polkit fix"; fail=1; }
     [ "$fail" -eq 0 ] || die "required fixes are not present - aborting"
 fi
 
