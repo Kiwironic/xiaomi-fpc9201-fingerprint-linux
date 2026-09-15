@@ -1,0 +1,23 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e22462a..aee3b17 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -18,7 +18,17 @@ find_package(OpenCV REQUIRED)
+ 
+ add_library(cvext STATIC cvext.cpp)
+ target_include_directories(cvext PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+-target_link_libraries(cvext PUBLIC opencv_core opencv_imgproc opencv_features2d opencv_imgcodecs opencv_calib3d opencv_flann)
++# OpenCV 5 renamed the features2d and calib3d modules to features and calib.
++# OpenCV_VERSION_MAJOR is exported by OpenCVConfig.cmake on both 4.x and 5.x.
++if (OpenCV_VERSION_MAJOR VERSION_GREATER_EQUAL 5)
++set(OPENCV_FEATURES2D_LIB opencv_features)
++set(OPENCV_CALIB3D_LIB opencv_calib)
++else()
++set(OPENCV_FEATURES2D_LIB opencv_features2d)
++set(OPENCV_CALIB3D_LIB opencv_calib3d)
++endif()
++
++target_link_libraries(cvext PUBLIC opencv_core opencv_imgproc ${OPENCV_FEATURES2D_LIB} opencv_imgcodecs ${OPENCV_CALIB3D_LIB} opencv_flann)
+ 
+ if (CMAKE_BUILD_TYPE STREQUAL Debug)
+ target_link_libraries(cvext PUBLIC opencv_highgui)

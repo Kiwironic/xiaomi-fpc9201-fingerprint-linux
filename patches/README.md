@@ -19,6 +19,7 @@ they are all intended to land upstream rather than live in a fork.
 | `04-fpc9201-signal-and-logging` | `src/drv_fpc/fpc9201.cpp` | **function** | Emits `VerifyFingerSelected` (declared upstream, never sent) **after** the `VerifyStart` method return, so `pam_fprintd` accepts it and PAM/GNOME show a prompt; clears latched `finger-present`; labelled logging |
 | `05-fingerprint-atomic-save` | `src/drv_fpc/fingerprint.cpp` | **data loss** | `save()` dereferenced NULL on `fopen` failure and truncated the live DB in place; now temp-file + `fsync` + atomic `rename`. Also checks `fread` |
 | `06-cmake-system-libs` | `CMakeLists.txt`, `src/CMakeLists.txt` | build | Build against system OpenCV/libevent instead of vcpkg |
+| `07-opencv5-module-names` | `src/CMakeLists.txt` | build | OpenCV 5 renamed the `features2d` and `calib3d` modules to `features` and `calib`, so the hardcoded link names failed with `cannot find -lopencv_features2d`. Selects the right names via `OpenCV_VERSION_MAJOR`, keeping OpenCV 4 working |
 
 ## Patch 04 and signal ordering
 

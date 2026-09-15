@@ -117,11 +117,15 @@ log "Verifying toolchain and libraries"
 for tool in git cmake make pkg-config; do
     command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
-if ! pkg-config --exists opencv4; then
-    die "opencv4 not found by pkg-config - install the OpenCV dev package"
+# OpenCV 5's pkg-config module is named opencv5, not opencv4. This is only a
+# sanity gate; CMake's find_package(OpenCV) works with either.
+OPENCV_PC=opencv4
+pkg-config --exists "$OPENCV_PC" || OPENCV_PC=opencv5
+if ! pkg-config --exists "$OPENCV_PC"; then
+    die "opencv4/opencv5 not found by pkg-config - install the OpenCV dev package"
 fi
-OPENCV_VER="$(pkg-config --modversion opencv4)"
-echo "  OpenCV $OPENCV_VER"
+OPENCV_VER="$(pkg-config --modversion "$OPENCV_PC")"
+echo "  OpenCV $OPENCV_VER (module: $OPENCV_PC)"
 echo "  $(cmake --version | head -1)"
 
 # ---------------------------------------------------------------- fetch ------
@@ -163,6 +167,7 @@ apply_patch "$SRC_DIR"           "$P/03-main-umask-security.patch"
 apply_patch "$SRC_DIR"           "$P/04-fpc9201-signal-and-logging.patch"
 apply_patch "$SRC_DIR"           "$P/05-fingerprint-atomic-save.patch"
 apply_patch "$SRC_DIR"           "$P/06-cmake-system-libs.patch"
+apply_patch "$SRC_DIR"           "$P/07-opencv5-module-names.patch"
 apply_patch "$SRC_DIR/asyncdbus" "$P/01-asyncdbus-no-abort-on-spurious-wakeup.patch"
 apply_patch "$SRC_DIR/jinx"      "$P/00-jinx-result-move-assign.patch"
 
@@ -183,6 +188,10 @@ if [ "$DRY_RUN" = 0 ]; then
     # defers it into the reply continuation.
     grep -q 'send_verify_finger_selected' "$SRC_DIR/src/drv_fpc/fpc9201.cpp" \
         && echo "  ok: prompt ordering fix" || { echo "  MISSING: prompt ordering fix"; fail=1; }
+    # OpenCV 5 renamed the features2d/calib3d modules to features/calib;
+    # without this the link step fails with "cannot find -lopencv_features2d".
+    grep -q 'OPENCV_FEATURES2D_LIB' "$SRC_DIR/src/CMakeLists.txt" \
+        && echo "  ok: opencv5 module names" || { echo "  MISSING: opencv5 fix"; fail=1; }
     [ "$fail" -eq 0 ] || die "required fixes are not present - aborting"
 fi
 
