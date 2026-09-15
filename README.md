@@ -11,7 +11,7 @@ enrollment, no login, nothing in Settings.
 
 This repository fixes that: it builds the
 [fingerprint-ocv](https://github.com/vrolife/fingerprint-ocv) userspace driver
-with **7 bug fixes** applied and installs it as a drop-in replacement for the
+with **8 bug fixes** applied and installs it as a drop-in replacement for the
 standard fingerprint service, so your desktop and `sudo` use it with no further
 configuration.
 
@@ -44,20 +44,15 @@ The sensor is what matters, not the laptop model — if `lsusb` shows
 | Laptop | Sensor confirmed | This driver tested |
 |--------|------------------|--------------------|
 | Xiaomi Book Pro 14 (2022) | Yes | **Yes** — development machine, Fedora 44 |
-| RedmiBook Pro 15 (2022) | Yes — reported as `FPC Sensor Controller L:0001 (10a5:9201)` ([#1](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1), Arch) | Not yet |
+| RedmiBook Pro 15 (2022) | Yes — reported as `FPC Sensor Controller L:0001 (10a5:9201)` ([#1](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1), Arch) | **Yes** — Garuda Linux (Arch), OpenCV 5, KDE; verified install, enrollment, lock screen, `sudo` and polkit ([#1 comment](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1#issuecomment-5674549013)) |
 | Other Xiaomi / RedmiBook models of the same generation | Likely, unconfirmed | Not yet |
 | Any other laptop reporting `10a5:9201` | By definition | Not yet |
 
 "Sensor confirmed" means someone has posted the matching USB identification
 string. "This driver tested" means the driver has actually been run there and the
-result reported — so far only the development machine. If you try another model,
+result reported. If you try another model,
 please [report it](#reporting-a-result); that is the single most useful
 contribution right now.
-
-Note that the RedmiBook Pro 15 report was filed against an earlier, unrelated
-kernel-module attempt that could not work for this sensor at all. It says nothing
-about whether *this* driver works there — the hardware is the same, so it very
-plausibly does.
 
 Sensors that are **not** this one, including other FPC parts and the Goodix,
 Synaptics (`06cb:`) and Validity (`138a:`) readers common in ThinkPads and Dells,
@@ -85,7 +80,7 @@ To check everything is in place:
 sudo ./scripts/verify-install.sh
 ```
 
-That runs 18 read-only checks and tells you the exact next step if something is
+That runs 19 read-only checks and tells you the exact next step if something is
 wrong. It changes nothing.
 
 To remove it:
@@ -103,6 +98,12 @@ sudo fprintd-list "$USER"                 # list enrolled fingers
 sudo fprintd-verify "$USER"               # test a press
 sudo journalctl -u fprintd -f             # watch what the sensor is doing
 ```
+
+Enrolling or deleting prints **without** `sudo` now asks for your password via
+polkit — the same rule stock fprintd enforces (`auth_self_keep`). With `sudo`
+nothing changes: root is always authorized. This was added after
+[#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)
+pointed out that enrollment previously required no authentication at all.
 
 Reading the log while enrolling or verifying is the fastest way to understand a
 problem:
@@ -148,6 +149,13 @@ sudo journalctl -u fprintd --since '-5min' | grep 'match:'
 - `score` far below the threshold (e.g. 0.07) → the template is poor; re-enroll.
 - `overlap` far larger than the frame size (e.g. `77212/39424`) → the matching
   fix (patch `02`) is missing.
+
+**Verification is intermittent for just one finger** — e.g. your index finger
+matches at 0.6–0.7 while a middle finger hovers at the 0.30 threshold and needs
+a retry. That is not a flaky matcher: that one template is under-covered.
+Re-enroll that finger with more varied coverage, or raise `MIN_AREA`. Since
+`pam_fprintd` verifies `any` enrolled finger, a single weak template presents
+as an occasional failed first press even though every other finger is fine.
 
 **No prompt appears, but authentication works if you touch the sensor blindly**
 
@@ -213,6 +221,11 @@ GNOME Shell looks the fingerprint device up once, when your session starts. A
 newly installed driver is therefore not noticed until you **log out and back
 in**. This is also why the installer tells you to do that.
 
+KDE works differently: `kscreenlocker` runs its own `kde-fingerprint` PAM
+service as a **separate stack alongside** the password field, so the lock
+screen offers fingerprint and password concurrently with no timeout penalty
+(reported on Garuda/SDDM, [#1](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1#issuecomment-5674549013)).
+
 ---
 
 # Standing on someone else's work
@@ -277,7 +290,9 @@ into one wide template; verification aligns a single press against it.
 
 # The fixes in detail
 
-Seven bugs, each diagnosed against real hardware rather than guessed at. Note
+Eight bugs — seven diagnosed against real hardware, plus an authorization gap
+reported by a user ([#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)).
+Note
 that fault 4's second half was introduced by *this* project's first attempt at
 fixing the first half — the failure modes here are subtle.
 
@@ -290,6 +305,7 @@ fixing the first half — the failure modes here are subtle.
 | 5 | `save()` null-deref + in-place truncate | Crash on any write failure; a crash mid-write destroyed **every** enrolled fingerprint | `05` |
 | 6 | Unchecked `fread` | Partly uninitialised buffer passed to AEAD decrypt | `05` |
 | 7 | `finger-present` latched `true` | D-Bus property permanently wrong after the first press | `04` |
+| 8 | No authorization check on enroll/delete | Any local user could add or remove fingerprints on their own account with no prompt — an unattended unlocked session could be given a new passwordless credential | `08` |
 
 Plus the installer sets `--min-area` to 150000 (the driver's own default is
 120000) for wider coverage, and the matcher is hardened against OpenCV
@@ -382,16 +398,18 @@ the threshold; fingerprint login works at the GNOME login screen and the
 `(or place finger on reader)` hint appears under the password field; the prompt
 appears in a terminal for `sudo` and the retry message appears after an
 unrecognised press; template database is `0600`; `verify-install.sh` reports
-18/18.
+19/19.
+
+Also **verified independently** on Garuda Linux (Arch family) with a RedmiBook
+Pro 15 2022, OpenCV 5 and KDE: enrollment, lock screen, `sudo` and polkit all
+work ([#1 comment](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/1#issuecomment-5674549013)).
 
 **Not verified:**
 
-- **Any distro other than Fedora.** Debian/Ubuntu/Arch/openSUSE package mappings
-  are written but untested. Reports welcome.
-- **Any laptop other than the Xiaomi Book Pro 14 2022.** The same sensor is
-  confirmed present in at least one other model (see
-  [compatibility](#which-laptops-have-this-sensor)), but this driver has not been
-  run there yet.
+- **Distros other than Fedora and Arch-family.** Debian/Ubuntu/openSUSE package
+  mappings are written but untested. Reports welcome.
+- **Laptops other than the Xiaomi Book Pro 14 2022 and RedmiBook Pro 15 2022.**
+  See [compatibility](#which-laptops-have-this-sensor).
 
 **Known limitations:**
 

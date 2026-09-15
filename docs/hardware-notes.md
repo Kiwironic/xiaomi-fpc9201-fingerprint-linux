@@ -37,12 +37,12 @@ Verified from the USB descriptor on the development machine:
 
 | Laptop | Distro reported | Source |
 |--------|-----------------|--------|
-| Xiaomi Book Pro 14 2022 (TIMI) | Fedora 44 | development machine |
-| RedmiBook Pro 15 2022 | Arch | user report, sensor string `FPC Sensor Controller L:0001 (10a5:9201)` |
+| Xiaomi Book Pro 14 2022 (TIMI) | Fedora 44 | development machine — driver tested |
+| RedmiBook Pro 15 2022 | Garuda Linux (Arch) | driver tested — enrollment, KDE lock screen, `sudo`, polkit; OpenCV 5 |
 
-Only the first has had this driver run on it. The second confirms the hardware is
-shared across models, which is the useful part — the USB ID is what determines
-compatibility, not the chassis.
+Both models have had this driver run on them successfully. The second confirms
+the hardware is shared across models, which is the useful part — the USB ID is
+what determines compatibility, not the chassis.
 
 ## Why not a kernel module
 
@@ -95,6 +95,14 @@ properties `name`, `num-enroll-stages`, `scan-type`, `finger-present`,
 
 Not implemented: `org.freedesktop.DBus.ObjectManager`, and
 `PropertiesChanged` is never emitted.
+
+Authorization: `EnrollStart`, `DeleteEnrolledFinger`, `DeleteEnrolledFingers`
+and `DeleteEnrolledFingers2` require a polkit `CheckAuthorization` pass for
+`net.reactivated.fprint.device.enroll` (stock fprintd's `auth_self_keep`
+action) — patch `08`. Upstream had no check at all beyond uid/claim matching,
+so any local user could enroll or delete prints unprompted. Root is always
+authorized by polkit; everyone else gets the session password prompt. Read-only
+and verify methods stay open, matching stock fprintd's policy.
 
 ### Things that will bite you
 
