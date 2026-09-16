@@ -99,11 +99,20 @@ sudo fprintd-verify "$USER"               # test a press
 sudo journalctl -u fprintd -f             # watch what the sensor is doing
 ```
 
-Enrolling or deleting prints **without** `sudo` now asks for your password via
-polkit — the same rule stock fprintd enforces (`auth_self_keep`). With `sudo`
-nothing changes: root is always authorized. This was added after
+Enrolling or deleting prints **without** `sudo` now proves it is you first,
+exactly the way stock fprintd does: before any scan starts, the daemon asks
+polkit (`net.reactivated.fprint.device.enroll`, `auth_self_keep`) and the
+session's polkit agent shows an authentication dialog — password, or
+fingerprint where the agent's PAM stack allows it. Enrollment only claims
+the sensor after that succeeds. `sudo` is unchanged: root is always
+authorized. This was added after
 [#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)
 pointed out that enrollment previously required no authentication at all.
+
+If enroll fails with `PermissionDenied` and **no** dialog appears, check
+`journalctl --user -u gnome-shell` — a wedged polkit agent (e.g. a broken
+extension flood) can starve the dialog. `pkexec id` is a quick probe of
+whether the agent responds at all.
 
 Reading the log while enrolling or verifying is the fastest way to understand a
 problem:
@@ -290,7 +299,7 @@ into one wide template; verification aligns a single press against it.
 
 # The fixes in detail
 
-Eight bugs — seven diagnosed against real hardware, plus an authorization gap
+Nine bugs — eight diagnosed against real hardware, plus an authorization gap
 reported by a user
 ([#2](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/issues/2)).
 Note that fault 4's second half was introduced by *this* project's first
@@ -306,6 +315,7 @@ attempt at fixing the first half — the failure modes here are subtle.
 | 6 | Unchecked `fread` | Partly uninitialised buffer passed to AEAD decrypt | `05` |
 | 7 | `finger-present` latched `true` | D-Bus property permanently wrong after the first press | `04` |
 | 8 | No authorization check on enroll/delete | Any local user could add or remove fingerprints on their own account with no prompt — an unattended unlocked session could be given a new passwordless credential | `08` |
+| 9 | Disconnect mid-scan `Put` on `_image_queue` | Daemon died with `PendingGetError` when a client vanished during a scan | `09` |
 
 Plus the installer sets `--min-area` to 150000 (the driver's own default is
 120000) for wider coverage, and the matcher is hardened against OpenCV

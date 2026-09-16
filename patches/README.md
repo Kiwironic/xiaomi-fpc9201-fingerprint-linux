@@ -20,7 +20,71 @@ they are all intended to land upstream rather than live in a fork.
 | `05-fingerprint-atomic-save` | `src/drv_fpc/fingerprint.cpp` | **data loss** | `save()` dereferenced NULL on `fopen` failure and truncated the live DB in place; now temp-file + `fsync` + atomic `rename`. Also checks `fread` |
 | `06-cmake-system-libs` | `CMakeLists.txt`, `src/CMakeLists.txt` | build | Build against system OpenCV/libevent instead of vcpkg |
 | `07-opencv5-module-names` | `src/CMakeLists.txt` | build | OpenCV 5 renamed the `features2d` and `calib3d` modules to `features` and `calib`, so the hardcoded link names failed with `cannot find -lopencv_features2d`. Selects the right names via `OpenCV_VERSION_MAJOR`, keeping OpenCV 4 working |
-| `08-polkit-authorization` | `src/drv_fpc/fpc9201.cpp` | **security** | No authorization check on enroll/delete — any local user could add or remove fingerprints with no prompt. Now calls polkit `CheckAuthorization` for `net.reactivated.fprint.device.enroll` (stock fprintd's `auth_self_keep` action), failing closed. Root stays authorized, so `sudo fprintd-enroll` is unaffected |
+| `08-polkit-authorization` | `src/drv_fpc/fpc9201.cpp` | **security** | No authorization check on enroll/delete — any local user could add or remove fingerprints with no prompt. Adds polkit `CheckAuthorization` for `net.reactivated.fprint.device.enroll` (stock fprintd's `auth_self_keep` action), failing closed. The check runs on a side task (`WorkerPolkitGate`) — required, see below — and the call is re-queued once authorized. Root stays authorized, so `sudo fprintd-enroll` is unaffected |
+| `09-disconnect-mid-scan-crash` | `src/drv_fpc/fpc9201.cpp` | **crash** | Client disconnect mid-scan killed the daemon: a cancelled `WorkerEnrollVerify` can leave a pending `Get` on `_image_queue`, and the disconnect path's `send_enroll_stop()` then `Put` to it — `PendingGetError`. Now resets the queue and stops the sensor via the control queue (`FPP_StopSensor`) |
+| `10-jinx-queue2-get-return` | `jinx/` submodule | build | `Queue2::Get::async_poll` fell off the end of a non-void function after its switch — `-Wreturn-type` warning and UB if `Queue2Status` ever gains a value. Defensive `async_throw` added |
+| `11-jinx-error-message-fallback` | `jinx/` submodule | build | `JINX_ERROR_IMPLEMENT` generates a `message()` whose switch has no default — same `-Wreturn-type` UB at every expansion site (eventengine, openssl). Fallback `"unknown error"` return added in the macro |
+| `12-crypto-evp-mac-hmac` | `src/drv_fpc/crypto.cpp` | build | `HMAC_CTX_*` calls are deprecated since OpenSSL 3.0 and slated for removal. Replaced with the `EVP_MAC` API; signature check now uses constant-time `CRYPTO_memcmp` |
+
+
+## Patch 08: why the check runs on a side task
+
+This daemon's message pump is strictly serial — one `WorkerDevice` task
+loops `get → dispatch → handle → get`. A `CheckAuthorization` awaited on
+that task parks the whole device: while the check was pending, **every
+other call to the device queued behind it**.
+
+That matters because the polkit agent's helper runs `pam_fprintd`, which
+calls `Claim` on this same device. Observed with an earlier version of
+this fix: the Claim sat in the queue until its ~25s D-Bus timeout,
+`pam_fprintd` failed, PAM fell through to `pam_unix`, and the password
+dialog appeared — at the same moment the client's `EnrollStart` timed
+out. Reproducible every time, independent of the desktop environment's
+state.
+
+Upstream `fprintd` uses a *synchronous* `CheckAuthorization` on the same
+code path, but gets away with it because `polkit_authority_check_
+authorization_sync` keeps iterating the GLib main loop while it waits —
+other calls still dispatch ("This may possibly block the invocation till
+the user has not provided an authentication method, so other calls could
+arrive"). This jinx runtime has no nested loop, so the check lives on a
+side task:
+
+- `check_polkit` parks a `ref`'d copy of the call, spawns a
+  `WorkerPolkitGate` task, and returns to `run()` — the dispatch loop
+  stays live.
+- The helper's `Claim` now dispatches immediately and fails fast with
+  `AlreadyInUse`, so the dialog's password prompt appears in about a
+  second (same as upstream, where the claimed device is equally
+  unavailable to the helper).
+- On `authorized`, the gate re-queues the original call into the device
+  message queue; it dispatches again, finds its gate entry marked
+  authorized, and proceeds through `check_sender`/`enroll_verify_start`
+  normally. On denial the gate replies `PermissionDenied` directly.
+- On caller disconnect or `Release` mid-check, `drop_auth_gates` cancels
+  the gate task; its `async_finalize` sends `CancelCheckAuthorization`
+  (cancellation id `fingerpp-<sender>:<serial>`) so no orphaned dialog
+  lingers. An already-authorized serial is tombstoned, not erased, so a
+  re-queued call still in the queue is dropped rather than spawning a
+  fresh check.
+- The gate map is keyed by `"<sender>:<serial>"` — D-Bus serials are
+  per-connection, so the sender must be part of the key.
+
+Fail-closed throughout: no reply, malformed reply, denial, or timeout all
+deny. A `Claim` by another user while a check is pending is rejected
+early without prompting, matching upstream's claimed-check-first order.
+
+## Patch 09: disconnect mid-scan crash
+
+A cancelled `WorkerEnrollVerify` can leave a pending `Get` on
+`_image_queue`. The old `NameOwnerChanged` disconnect path then called
+`send_enroll_stop()`, which `Put`s `FPP_EnrollVerifyStop` onto that queue —
+waking a dead awaitable and throwing `PendingGetError` (observed: daemon
+killed when a client disconnected mid-scan). The disconnect path now
+resets `_image_queue` after the cancel and posts `FPP_StopSensor` to
+`_event_queue` (the control loop) directly — the client is gone, so no
+`EnrollStatus` signal is needed. `release()`/`EnrollStop` are unchanged:
+those use `resume()`/a live task, which drains the queue normally.
 
 ## Patch 04 and signal ordering
 
@@ -69,18 +133,21 @@ enrolled finger is therefore unnecessary; ordering was the whole problem.
 
 ## Applying manually
 
-Patches `02`–`08` apply at the repo root. Patches `00` and `01` target
-submodules and **must** be applied from inside the submodule directory — a
-single top-level `git apply patches/*.patch` fails with
-`No such file or directory` on those paths.
+Patches are applied in numeric order. `02`–`09` and `12` apply at the repo
+root; `00`, `01`, `10` and `11` target submodules and **must** be applied
+from inside the submodule directory — a single top-level
+`git apply patches/*.patch` fails with `No such file or directory` on
+those paths.
 
 ```bash
 cd /usr/local/src/fingerprint-ocv
 P=/path/to/this/repo/patches
 
-git apply "$P"/0{2,3,4,5,6,7,8}-*.patch
-git -C asyncdbus apply "$P"/01-*.patch
 git -C jinx      apply "$P"/00-*.patch
+git -C asyncdbus apply "$P"/01-*.patch
+git apply "$P"/0{2,3,4,5,6,7,8,9}-*.patch
+git -C jinx      apply "$P"/10-*.patch "$P"/11-*.patch
+git apply "$P"/12-*.patch
 ```
 
 Check whether one is already applied:
@@ -100,6 +167,8 @@ grep -q 'VerifyFingerSelected' src/drv_fpc/fpc9201.cpp  || echo "PROMPT FIX MISS
 grep -q 'send_verify_finger_selected' src/drv_fpc/fpc9201.cpp \
     || echo "PROMPT ORDERING FIX MISSING (signal emitted too early; PAM drops it)"
 grep -q 'CheckAuthorization'        src/drv_fpc/fpc9201.cpp  || echo "POLKIT FIX MISSING"
+grep -q 'WorkerPolkitGate'          src/drv_fpc/fpc9201.cpp  || echo "AUTH GATE FIX MISSING"
+grep -q 'PendingGetError'           src/drv_fpc/fpc9201.cpp  || echo "DISCONNECT CRASH FIX MISSING"
 ```
 
 The last check matters: a build can contain `VerifyFingerSelected` and still

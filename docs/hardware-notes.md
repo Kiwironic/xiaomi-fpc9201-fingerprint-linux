@@ -97,12 +97,31 @@ Not implemented: `org.freedesktop.DBus.ObjectManager`, and
 `PropertiesChanged` is never emitted.
 
 Authorization: `EnrollStart`, `DeleteEnrolledFinger`, `DeleteEnrolledFingers`
-and `DeleteEnrolledFingers2` require a polkit `CheckAuthorization` pass for
+and `DeleteEnrolledFingers2` require polkit authorization before the sensor
+is captured — patch `08`. Upstream had no check at all beyond
+uid/claim matching, so any local user could enroll or delete prints
+unprompted. The gate calls polkit `CheckAuthorization` for
 `net.reactivated.fprint.device.enroll` (stock fprintd's `auth_self_keep`
-action) — patch `08`. Upstream had no check at all beyond uid/claim matching,
-so any local user could enroll or delete prints unprompted. Root is always
-authorized by polkit; everyone else gets the session password prompt. Read-only
-and verify methods stay open, matching stock fprintd's policy.
+action, `AllowUserInteraction`) with the caller's `system-bus-name` as the
+subject — the session's registered polkit agent renders the prompt and the
+sensor is not touched until the check succeeds. Root is always authorized;
+read-only and verify methods stay open, matching stock fprintd's policy.
+
+Crucially the check must **not** run on the device task: this daemon's
+message pump is serial (`run()` → get → dispatch → run()), so awaiting the
+reply there also blocks the polkit helper's own `Claim` (the helper runs
+`pam_fprintd`), which then sits in the queue for the full ~25s bus
+timeout — the dialog surfaces at the exact moment the client gives up.
+Upstream fprintd can afford a synchronous check because its blocking call
+still iterates the GLib main loop; here the check runs on a side task
+(`WorkerPolkitGate`) and the gated call is re-queued once authorized. On
+disconnect or `Release` mid-check the gate is cancelled and
+`CancelCheckAuthorization` withdraws the prompt.
+
+Separately, patch `09` fixes a daemon crash on client disconnect mid-scan
+(`PendingGetError` from a `Put` waking a cancelled task's pending `Get`
+on `_image_queue`) and stops the sensor directly via `FPP_StopSensor` on
+the control queue.
 
 ### Things that will bite you
 
