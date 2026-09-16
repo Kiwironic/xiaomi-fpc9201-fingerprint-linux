@@ -7,8 +7,14 @@ License:        AGPL-3.0-only
 URL:            https://github.com/Kiwironic/fingerprint-ocv
 Source0:        %{url}/releases/download/v%{version}/fingerprint-ocv-%{version}-src.tar.gz
 
-BuildRequires:  cmake gcc-c++ make pkgconf-pkg-config
+BuildRequires:  cmake gcc-c++ make
+%if 0%{?suse_version}
+BuildRequires:  pkg-config
+BuildRequires:  libusb-1_0-devel libevent-devel dbus-1-devel libopenssl-devel opencv-devel
+%else
+BuildRequires:  pkgconf-pkg-config
 BuildRequires:  libusb1-devel libevent-devel dbus-devel openssl-devel opencv-devel
+%endif
 Requires:       fprintd polkit
 
 %description

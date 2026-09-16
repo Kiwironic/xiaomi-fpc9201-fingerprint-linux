@@ -11,9 +11,9 @@ enrollment, no login, nothing in Settings.
 
 This repository fixes that: it builds the
 [fingerprint-ocv](https://github.com/vrolife/fingerprint-ocv) userspace driver
-with **8 bug fixes** applied and installs it as a drop-in replacement for the
-standard fingerprint service, so your desktop and `sudo` use it with no further
-configuration.
+with a set of crash, security and correctness fixes applied and installs it as
+a drop-in replacement for the standard fingerprint service, so your desktop
+and `sudo` use it with no further configuration.
 
 ## What you get
 
@@ -60,23 +60,40 @@ are unrelated to this driver and are not made to work by it.
 
 ## Install
 
-### Packages (Fedora / Arch)
+### Packages
 
 Prebuilt packages are built from the tagged releases of
 [Kiwironic/fingerprint-ocv](https://github.com/Kiwironic/fingerprint-ocv)
 (this project's patched fork of the upstream driver). Packaging sources
-live in [packaging/](packaging/).
+live in
+[packaging/](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/tree/main/packaging).
 
-**Fedora** — COPR [`kiwir0nic/fingerprint-ocv-fpc9201`](https://copr.fedorainfracloud.org/coprs/kiwir0nic/fingerprint-ocv-fpc9201/):
+**Fedora / RHEL-family** — COPR [`kiwir0nic/fingerprint-ocv-fpc9201`](https://copr.fedorainfracloud.org/coprs/kiwir0nic/fingerprint-ocv-fpc9201/):
 
 ```bash
 sudo dnf copr enable kiwir0nic/fingerprint-ocv-fpc9201
 sudo dnf install fingerprint-ocv-fpc9201
 ```
 
+**Debian / Ubuntu** — `.deb` packages are attached to the
+[v1.0.0 release](https://github.com/Kiwironic/fingerprint-ocv/releases/tag/v1.0.0)
+(pick the one matching your distro — they differ in library dependencies):
+
+```bash
+# Ubuntu 24.04
+sudo apt install ./fingerprint-ocv-fpc9201_1.0.0-1_ubuntu24.04_amd64.deb
+
+# Debian 12 (bookworm)
+sudo apt install ./fingerprint-ocv-fpc9201_1.0.0-1_debian12_amd64.deb
+```
+
 **Arch** — the `fingerprint-ocv-fpc9201` AUR package is prepared in
-[packaging/aur/](packaging/aur/) and will be published once AUR account
-registration reopens; until then use `makepkg -si` in that directory.
+[packaging/aur/](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/tree/main/packaging/aur)
+and will be published once AUR account registration reopens; until then use
+`makepkg -si` in that directory.
+
+**openSUSE** — an [openSUSE Build Service](https://build.opensuse.org) project
+is planned; until then use **From source** below.
 
 ### From source
 
@@ -308,8 +325,8 @@ into one wide template; verification aligns a single press against it.
 
 | Path | Purpose |
 |------|---------|
-| `/usr/local/bin/fingerpp` | the daemon |
-| `/etc/systemd/system/fprintd.service.d/override.conf` | redirects fprintd |
+| `/usr/local/bin/fingerpp` | the daemon (source install; packages use `/usr/libexec/fingerpp` on Fedora, `/usr/lib/fingerpp` elsewhere) |
+| `/etc/systemd/system/fprintd.service.d/override.conf` | redirects fprintd (source install; packages ship their own drop-in under `/usr/lib/systemd/system/fprintd.service.d/`) |
 | `/etc/udev/rules.d/99-fpc9201.rules` | device access for the local user |
 | `/var/lib/fprint/fpc9201.bin` | encrypted templates, **must be `0600`** |
 | `/var/lib/fprint/backups/` | automatic backups |
@@ -436,8 +453,10 @@ work ([#1 comment](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux
 
 **Not verified:**
 
-- **Distros other than Fedora and Arch-family.** Debian/Ubuntu/openSUSE package
-  mappings are written but untested. Reports welcome.
+- **Distros other than Fedora.** Packages exist for Fedora (COPR, tested),
+  Debian 12 and Ubuntu 24.04 (.deb, built but untested on hardware), and
+  Arch (PKGBUILD, tested on Garuda). openSUSE users install **from source**.
+  Reports welcome.
 - **Laptops other than the Xiaomi Book Pro 14 2022 and RedmiBook Pro 15 2022.**
   See [compatibility](#which-laptops-have-this-sensor).
 
@@ -450,7 +469,7 @@ work ([#1 comment](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux
 - Running two copies of the daemon at once aborts the running one (see
   Troubleshooting). Unfixed.
 - An OpenCV major/minor upgrade breaks the binary via a soname change — re-run
-  `install.sh`.
+  `install.sh`, or update/rebuild the package.
 - Image-based matching is inherently weaker than a match-on-chip sensor.
   Reasonable for convenience; consider that before relying on it for anything
   sensitive.

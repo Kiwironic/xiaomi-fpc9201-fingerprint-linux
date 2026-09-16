@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+DEB_HOST_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release
+
+# Upstream has no install target; install the daemon and config by hand.
+override_dh_auto_install:
+	install -Dm755 obj-$(DEB_HOST_GNU_TYPE)/src/fingerprint-ocv \
+		debian/fingerprint-ocv-fpc9201/usr/lib/fingerpp
+	install -Dm644 debian/99-fpc9201.rules \
+		debian/fingerprint-ocv-fpc9201/usr/lib/udev/rules.d/99-fpc9201.rules
+	install -Dm644 debian/fingerpp.conf \
+		debian/fingerprint-ocv-fpc9201/usr/lib/systemd/system/fprintd.service.d/fingerpp.conf

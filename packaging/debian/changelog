@@ -1,0 +1,6 @@
+fingerprint-ocv-fpc9201 (1.0.0-1) unstable; urgency=medium
+
+  * Initial package: vrolife/fingerprint-ocv plus crash, security and
+    correctness fixes for the 10a5:9201 sensor.
+
+ -- Kiwironic <menabassily@hotmail.com>  Wed, 16 Sep 2026 19:00:00 +0700

@@ -1,0 +1,20 @@
+Source: fingerprint-ocv-fpc9201
+Section: utils
+Priority: optional
+Maintainer: Kiwironic <menabassily@hotmail.com>
+Build-Depends: debhelper-compat (= 13), cmake, g++, pkg-config,
+ libusb-1.0-0-dev, libevent-dev, libdbus-1-dev, libssl-dev, libopencv-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/Kiwironic/fingerprint-ocv
+Rules-Requires-Root: no
+
+Package: fingerprint-ocv-fpc9201
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, fprintd, polkitd | policykit-1
+Description: Fingerprint driver for the FPC/Chipsailing 10a5:9201 sensor
+ Patched build of vrolife/fingerprint-ocv for the FPC/Chipsailing
+ 10a5:9201 fingerprint sensor (Xiaomi Book Pro 14 2022 and relatives).
+ .
+ Installs the daemon as a drop-in replacement for the fprintd service,
+ so GNOME/KDE login and pam_fprintd (sudo, polkit) work with no further
+ configuration.

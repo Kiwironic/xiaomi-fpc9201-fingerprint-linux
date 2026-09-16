@@ -1,0 +1,2 @@
+# FPC/Chipsailing 10a5:9201 fingerprint sensor
+SUBSYSTEM=="usb", ATTRS{idVendor}=="10a5", ATTRS{idProduct}=="9201", TAG+="uaccess"
