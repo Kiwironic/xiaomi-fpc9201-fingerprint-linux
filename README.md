@@ -60,6 +60,17 @@ are unrelated to this driver and are not made to work by it.
 
 ## Install
 
+### Packages (Fedora / Arch)
+
+Prebuilt packages live in [packaging/](packaging/) — a COPR repo for Fedora
+and an AUR package for Arch, both built from the tagged releases of
+[Kiwironic/fingerprint-ocv](https://github.com/Kiwironic/fingerprint-ocv)
+(this project's patched fork of the upstream driver). See
+[packaging/README.md](packaging/README.md) for the repo addresses once
+published.
+
+### From source
+
 ```bash
 git clone https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux.git
 cd xiaomi-fpc9201-fingerprint-linux

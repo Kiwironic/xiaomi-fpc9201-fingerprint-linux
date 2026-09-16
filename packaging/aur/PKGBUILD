@@ -1,0 +1,28 @@
+# Maintainer: Kiwironic <menabassily@hotmail.com>
+pkgname=fingerprint-ocv-fpc9201
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Fingerprint driver for the FPC/Chipsailing 10a5:9201 sensor (Xiaomi Book Pro 14 2022), patched fingerprint-ocv replacing fprintd"
+arch=('x86_64')
+url="https://github.com/Kiwironic/fingerprint-ocv"
+license=('AGPL-3.0-only')
+depends=('fprintd' 'polkit' 'libusb' 'libevent' 'dbus' 'openssl' 'opencv')
+makedepends=('cmake' 'gcc' 'make' 'pkgconf')
+install="${pkgname}.install"
+source=("${pkgname}-${pkgver}-src.tar.gz::https://github.com/Kiwironic/fingerprint-ocv/releases/download/v${pkgver}/fingerprint-ocv-${pkgver}-src.tar.gz"
+        "99-fpc9201.rules"
+        "fingerpp.conf")
+sha256sums=('75619b12b81e00c6584eef0b258d23e1044f7e18905cf8c5617352a765c6f84b'
+            '32ab45dc4aa05d5210a67041ce150605b0e6401189f0678239aa89980a6c1c46'
+            'ef66c2ad7b895d81b9d45eba4d38d455af4a239c54926b55b013e82f8fd2078f')
+
+build() {
+  cmake -S "fingerprint-ocv-${pkgver}" -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build
+}
+
+package() {
+  install -Dm755 "build/src/fingerprint-ocv" "${pkgdir}/usr/lib/fingerpp"
+  install -Dm644 "${srcdir}/99-fpc9201.rules" "${pkgdir}/usr/lib/udev/rules.d/99-fpc9201.rules"
+  install -Dm644 "${srcdir}/fingerpp.conf" "${pkgdir}/usr/lib/systemd/system/fprintd.service.d/fingerpp.conf"
+}

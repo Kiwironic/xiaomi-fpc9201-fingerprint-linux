@@ -1,0 +1,27 @@
+pkgbase = fingerprint-ocv-fpc9201
+	pkgdesc = Fingerprint driver for the FPC/Chipsailing 10a5:9201 sensor (Xiaomi Book Pro 14 2022), patched fingerprint-ocv replacing fprintd
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/Kiwironic/fingerprint-ocv
+	install = fingerprint-ocv-fpc9201.install
+	arch = x86_64
+	license = AGPL-3.0-only
+	makedepends = cmake
+	makedepends = gcc
+	makedepends = make
+	makedepends = pkgconf
+	depends = fprintd
+	depends = polkit
+	depends = libusb
+	depends = libevent
+	depends = dbus
+	depends = openssl
+	depends = opencv
+	source = fingerprint-ocv-fpc9201-1.0.0-src.tar.gz::https://github.com/Kiwironic/fingerprint-ocv/releases/download/v1.0.0/fingerprint-ocv-1.0.0-src.tar.gz
+	source = 99-fpc9201.rules
+	source = fingerpp.conf
+	sha256sums = 75619b12b81e00c6584eef0b258d23e1044f7e18905cf8c5617352a765c6f84b
+	sha256sums = 32ab45dc4aa05d5210a67041ce150605b0e6401189f0678239aa89980a6c1c46
+	sha256sums = ef66c2ad7b895d81b9d45eba4d38d455af4a239c54926b55b013e82f8fd2078f
+
+pkgname = fingerprint-ocv-fpc9201

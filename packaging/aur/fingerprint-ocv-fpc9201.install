@@ -1,0 +1,23 @@
+post_install() {
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=usb --attr-match=idVendor=10a5 2>/dev/null || true
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl try-restart fprintd.service 2>/dev/null || true
+  cat <<'EOF'
+==> Enroll a finger (interactive, run in a real terminal):
+      sudo fprintd-enroll "$USER" -f right-index-finger
+==> Fingerprint PAM auth: enable via GNOME Settings > Users, or ensure
+    pam_fprintd is in your PAM stack.
+==> Log out and back in for the lock-screen fingerprint hint to appear.
+EOF
+}
+
+post_upgrade() {
+  post_install
+}
+
+post_remove() {
+  udevadm control --reload-rules 2>/dev/null || true
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl try-restart fprintd.service 2>/dev/null || true
+}
