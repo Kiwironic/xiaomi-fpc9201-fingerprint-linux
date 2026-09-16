@@ -75,25 +75,64 @@ sudo dnf copr enable kiwir0nic/fingerprint-ocv-fpc9201
 sudo dnf install fingerprint-ocv-fpc9201
 ```
 
-**Debian / Ubuntu** — `.deb` packages are attached to the
-[v1.0.0 release](https://github.com/Kiwironic/fingerprint-ocv/releases/tag/v1.0.0)
-(pick the one matching your distro — they differ in library dependencies):
+**Everything else** — the [openSUSE Build Service](https://build.opensuse.org/package/show/home:Kiwironic/fingerprint-ocv-fpc9201)
+project (`home:Kiwironic`) builds the package for Arch, openSUSE Tumbleweed,
+Debian 12/13, Fedora 43/44 and Ubuntu 24.04 through 26.04, and publishes a
+native repository per distro.
+
+**Debian / Ubuntu** — add the apt repo for your release. Replace
+`Debian_12` below with the directory matching your system:
+`Debian_13`, `xUbuntu_24.04`, `xUbuntu_24.10`, `xUbuntu_25.04`,
+`xUbuntu_25.10` or `xUbuntu_26.04`.
 
 ```bash
-# Ubuntu 24.04
-sudo apt install ./fingerprint-ocv-fpc9201_1.0.0-1_ubuntu24.04_amd64.deb
-
-# Debian 12 (bookworm)
-sudo apt install ./fingerprint-ocv-fpc9201_1.0.0-1_debian12_amd64.deb
+echo 'deb http://download.opensuse.org/repositories/home:/Kiwironic/Debian_12/ /' \
+    | sudo tee /etc/apt/sources.list.d/fpc9201.list
+curl -fsSL https://download.opensuse.org/repositories/home:Kiwironic/Debian_12/Release.key \
+    | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/fpc9201.gpg > /dev/null
+sudo apt update && sudo apt install fingerprint-ocv-fpc9201
 ```
 
-**Arch** — the `fingerprint-ocv-fpc9201` AUR package is prepared in
-[packaging/aur/](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/tree/main/packaging/aur)
-and will be published once AUR account registration reopens; until then use
-`makepkg -si` in that directory.
+Standalone `.deb` files are also attached to the
+[v1.0.0 release](https://github.com/Kiwironic/fingerprint-ocv/releases/tag/v1.0.0)
+if you prefer a one-off install without the repo.
 
-**openSUSE** — an [openSUSE Build Service](https://build.opensuse.org) project
-is planned; until then use **From source** below.
+**Arch** — add the OBS pacman repo to `/etc/pacman.conf` (a native repo, no
+AUR helper needed; the AUR package is also prepared under
+[packaging/aur/](https://github.com/Kiwironic/xiaomi-fpc9201-fingerprint-linux/tree/main/packaging/aur)
+for when registration reopens):
+
+```ini
+[home_Kiwironic_Arch]
+SigLevel = Never
+Server = https://download.opensuse.org/repositories/home:Kiwironic/Arch/$arch
+```
+
+```bash
+sudo pacman -Sy fingerprint-ocv-fpc9201
+```
+
+`SigLevel = Never` skips pacman's signature check — the repo is signed with the
+OBS project's own key, which is not in the pacman keyring. The packages are
+still built and signed by OBS; this only affects local verification.
+
+**openSUSE Tumbleweed**:
+
+```bash
+sudo zypper addrepo https://download.opensuse.org/repositories/home:Kiwironic/openSUSE_Tumbleweed/home:Kiwironic.repo
+sudo zypper refresh && sudo zypper install fingerprint-ocv-fpc9201
+```
+
+**Fedora via OBS** (alternative to COPR — replace `Fedora_44` with `Fedora_43`
+if needed):
+
+```bash
+sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Kiwironic/Fedora_44/home:Kiwironic.repo
+sudo dnf install fingerprint-ocv-fpc9201
+```
+
+After installing from a package, enroll with `fprintd-enroll` and **log out and
+back in** — the lock-screen hint only appears in a fresh session.
 
 ### From source
 
