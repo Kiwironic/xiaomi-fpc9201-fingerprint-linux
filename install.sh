@@ -10,20 +10,21 @@
 # Safe to re-run. Backs up anything it replaces. See ./uninstall.sh to revert.
 #
 # Usage:
-#   sudo ./install.sh                 # build + install
+#   sudo ./install.sh                 # build + install + self-check
 #   sudo ./install.sh --dry-run       # show what would happen, change nothing
 #   sudo ./install.sh --skip-deps     # don't touch the package manager
+#   sudo ./install.sh --no-verify     # skip the post-install self-check
 #
 set -euo pipefail
 
 REPO_URL="https://github.com/vrolife/fingerprint-ocv.git"
 REPO_REF="${REPO_REF:-}"            # optional pinned commit
 SRC_DIR="${SRC_DIR:-/usr/local/src/fingerprint-ocv}"
-DEST="/usr/local/bin/fingerpp"
-DATA_DIR="/var/lib/fprint"
+DEST="${DEST:-/usr/local/bin/fingerpp}"
+DATA_DIR="${DATA_DIR:-/var/lib/fprint}"
 BACKUP_DIR="$DATA_DIR/backups"
-UNIT_DROPIN="/etc/systemd/system/fprintd.service.d/override.conf"
-UDEV_RULE="/etc/udev/rules.d/99-fpc9201.rules"
+UNIT_DROPIN="${UNIT_DROPIN:-/etc/systemd/system/fprintd.service.d/override.conf}"
+UDEV_RULE="${UDEV_RULE:-/etc/udev/rules.d/99-fpc9201.rules}"
 
 VENDOR_ID="10a5"
 PRODUCT_ID="9201"
@@ -36,12 +37,14 @@ MIN_SCORE="${MIN_SCORE:-0.30}"
 
 DRY_RUN=0
 SKIP_DEPS=0
+SKIP_VERIFY=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run)   DRY_RUN=1 ;;
         --skip-deps) SKIP_DEPS=1 ;;
+        --no-verify) SKIP_VERIFY=1 ;;
         -h|--help)   sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "Unknown option: $arg" >&2; exit 2 ;;
     esac
@@ -54,7 +57,10 @@ warn() { printf '%s[warn]%s %s\n' "$c_yel" "$c_off" "$*"; }
 die()  { printf '%s[error]%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  [dry-run] %s\n' "$*"; else "$@"; fi; }
 
-[ "$(id -u)" -eq 0 ] || die "must run as root (use sudo)"
+# A dry run changes nothing, so it does not need root.
+if [ "$DRY_RUN" = 0 ] && [ "$(id -u)" -ne 0 ]; then
+    die "must run as root (use sudo) - or try --dry-run first"
+fi
 
 # ------------------------------------------------------------ preflight ------
 log "Checking hardware"
@@ -139,7 +145,12 @@ fi
 
 if [ "$DRY_RUN" = 0 ]; then
     cd "$SRC_DIR"
-    [ -n "$REPO_REF" ] && git fetch --depth 1 origin "$REPO_REF" && git checkout -q FETCH_HEAD
+    # An && list only dies on its LAST command under set -e: a failed fetch
+    # would silently build the wrong ref, so check each step explicitly.
+    if [ -n "$REPO_REF" ]; then
+        git fetch --depth 1 origin "$REPO_REF" || die "cannot fetch REPO_REF=$REPO_REF"
+        git checkout -q FETCH_HEAD || die "cannot checkout $REPO_REF"
+    fi
     # Only the code submodules. vcpkg is huge, needs SSH, and we build against
     # system libraries instead.
     git submodule update --init --depth 1 asyncdbus asyncusb jinx
@@ -147,6 +158,24 @@ fi
 
 # ---------------------------------------------------------------- patch ------
 log "Applying fixes"
+# Patches stack on the same code (09 rewrites what 08 adds), so the
+# reverse-check below cannot recognise a fully patched tree: 08's "already
+# applied" test fails once 09 sits on top of it. Reset each repo to upstream
+# and apply the whole series fresh instead - always correct, and the
+# apply-check still catches real upstream changes.
+# reset --hard also drops staged changes; clean removes stray .orig/.rej
+# files left by manual patching attempts. Both are safe: this directory is
+# managed by this installer.
+if [ "$DRY_RUN" = 0 ]; then
+    git -C "$SRC_DIR" reset -q --hard
+    git -C "$SRC_DIR" clean -fdq
+    for sub in asyncdbus asyncusb jinx; do
+        if [ -e "$SRC_DIR/$sub/.git" ]; then
+            git -C "$SRC_DIR/$sub" reset -q --hard
+            git -C "$SRC_DIR/$sub" clean -fdq
+        fi
+    done
+fi
 apply_patch() {
     local dir="$1" patch="$2" name
     name="$(basename "$patch")"
@@ -161,7 +190,12 @@ apply_patch() {
     fi
 }
 
+# Applied in numeric order, 00 -> 12. Patches that share a file stack in this
+# order (04 -> 08 -> 09 on fpc9201.cpp, 06 -> 07 on src/CMakeLists.txt), so
+# the numbering IS the order - do not reorder without checking dependencies.
 P="$SCRIPT_DIR/patches"
+apply_patch "$SRC_DIR/jinx"      "$P/00-jinx-result-move-assign.patch"
+apply_patch "$SRC_DIR/asyncdbus" "$P/01-asyncdbus-no-abort-on-spurious-wakeup.patch"
 apply_patch "$SRC_DIR"           "$P/02-cvext-matching-robustness.patch"
 apply_patch "$SRC_DIR"           "$P/03-main-umask-security.patch"
 apply_patch "$SRC_DIR"           "$P/04-fpc9201-signal-and-logging.patch"
@@ -169,8 +203,10 @@ apply_patch "$SRC_DIR"           "$P/05-fingerprint-atomic-save.patch"
 apply_patch "$SRC_DIR"           "$P/06-cmake-system-libs.patch"
 apply_patch "$SRC_DIR"           "$P/07-opencv5-module-names.patch"
 apply_patch "$SRC_DIR"           "$P/08-polkit-authorization.patch"
-apply_patch "$SRC_DIR/asyncdbus" "$P/01-asyncdbus-no-abort-on-spurious-wakeup.patch"
-apply_patch "$SRC_DIR/jinx"      "$P/00-jinx-result-move-assign.patch"
+apply_patch "$SRC_DIR"           "$P/09-disconnect-mid-scan-crash.patch"
+apply_patch "$SRC_DIR/jinx"      "$P/10-jinx-queue2-get-return.patch"
+apply_patch "$SRC_DIR/jinx"      "$P/11-jinx-error-message-fallback.patch"
+apply_patch "$SRC_DIR"           "$P/12-crypto-evp-mac-hmac.patch"
 
 # Fail loudly rather than shipping a driver that crashes or leaks the DB.
 if [ "$DRY_RUN" = 0 ]; then
@@ -197,6 +233,17 @@ if [ "$DRY_RUN" = 0 ]; then
     # authentication prompt at all.
     grep -q 'CheckAuthorization' "$SRC_DIR/src/drv_fpc/fpc9201.cpp" \
         && echo "  ok: polkit authorization" || { echo "  MISSING: polkit fix"; fail=1; }
+    # The polkit check must run off the device task: dispatch is serial, so
+    # awaiting CheckAuthorization there also blocks the agent helper's own
+    # Claim, and the dialog then only appears once the client has timed out.
+    grep -q 'WorkerPolkitGate' "$SRC_DIR/src/drv_fpc/fpc9201.cpp" \
+        && echo "  ok: enroll auth gate" || { echo "  MISSING: enroll auth gate"; fail=1; }
+    # A cancelled scan task can leave a pending Get on _image_queue; the old
+    # disconnect path then posted EnrollVerifyStop to it and died with
+    # PendingGetError. The fix resets the queue and stops the sensor via the
+    # control queue instead.
+    grep -q 'PendingGetError' "$SRC_DIR/src/drv_fpc/fpc9201.cpp" \
+        && echo "  ok: disconnect crash fix" || { echo "  MISSING: disconnect crash fix"; fail=1; }
     [ "$fail" -eq 0 ] || die "required fixes are not present - aborting"
 fi
 
@@ -225,7 +272,7 @@ if [ -f "$DEST" ]; then
 fi
 # The upstream binary is called fingerprint-ocv; we install it as 'fingerpp'
 # because the systemd drop-in below refers to that name.
-run install -m 0755 "${NEW_BIN:-/dev/null}" "$DEST"
+run install -m 0755 "${NEW_BIN:-$SRC_DIR/build/src/fingerprint-ocv}" "$DEST"
 
 # udev: let the logged-in user open the device without root.
 if [ ! -f "$UDEV_RULE" ]; then
@@ -296,6 +343,17 @@ else
     warn "edit PAM files, by design - errors there can lock you out of the system."
 fi
 
+# ------------------------------------------------------------ self-check -----
+# Read-only post-install check: exercises the running daemon over D-Bus,
+# including the VerifyFingerSelected ordering that a build alone cannot prove.
+# A failure here means the install is broken NOW, not after the user enrolls.
+if [ "$DRY_RUN" = 0 ] && [ "$SKIP_VERIFY" = 0 ] \
+        && [ -x "$SCRIPT_DIR/scripts/verify-install.sh" ]; then
+    log "Running post-install self-check"
+    "$SCRIPT_DIR/scripts/verify-install.sh" \
+        || warn "self-check reported failures - see [fail] lines above"
+fi
+
 # ---------------------------------------------------------------- done -------
 if [ "$DRY_RUN" = 1 ]; then
     log "Dry run complete - nothing was changed"
@@ -320,11 +378,7 @@ Next steps:
 
        sudo fprintd-verify "\${SUDO_USER:-\$USER}" -f right-index-finger
 
-  3. Check the install:
-
-       sudo $SCRIPT_DIR/scripts/verify-install.sh
-
-  4. LOG OUT AND BACK IN before expecting the GNOME lock-screen fingerprint
+  3. LOG OUT AND BACK IN before expecting the GNOME lock-screen fingerprint
      hint. GNOME Shell looks the fingerprint device up once, at session start,
      so a freshly installed driver is not picked up until a new session. Then
      lock the screen and look under the password field for

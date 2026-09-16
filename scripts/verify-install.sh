@@ -152,6 +152,15 @@ if [ -x "$DEST" ]; then
         bad "polkit check absent - unpatched build; enroll/delete need no authentication"
         echo "         Rebuild with current patch 08: sudo ./install.sh"
     fi
+    # Patch 08's gate must run off the serial device task and cancel the
+    # prompt on disconnect. An older build that awaits the check on the
+    # device task only shows the dialog after the caller's ~25s timeout.
+    if grep -q 'CancelCheckAuthorization' "$_strings_tmp"; then
+        ok "binary has the non-blocking enroll auth gate"
+    else
+        bad "non-blocking auth gate absent - polkit dialog arrives after timeout"
+        echo "         Rebuild with current patch 08: sudo ./install.sh"
+    fi
     rm -f "$_strings_tmp"
     # The string being present only proves the interface declares it. Upstream
     # declared it and never emitted it, which is exactly the bug. And emitting
