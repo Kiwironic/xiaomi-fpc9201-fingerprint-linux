@@ -1,0 +1,11 @@
+diff --git a/include/jinx/queue2.hpp b/include/jinx/queue2.hpp
+--- a/include/jinx/queue2.hpp
++++ b/include/jinx/queue2.hpp
+@@ -202,6 +202,7 @@
+             case Queue2Status::Complete:
+                 return this->async_return();
+         }
++        return this->async_throw(ErrorQueue::PendingGetError);
+     }
+ };
+ 

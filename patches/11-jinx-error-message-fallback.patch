@@ -1,0 +1,12 @@
+diff --git a/include/jinx/error.hpp b/include/jinx/error.hpp
+index 61587ea..06c52fe 100644
+--- a/include/jinx/error.hpp
++++ b/include/jinx/error.hpp
+@@ -29,6 +29,7 @@ struct Category_##error_name : jinx::error::Category { \
+     } \
+     const char* message(const jinx::error::Error& code) const noexcept override { \
+         message_body; \
++        return "unknown error"; \
+     } \
+ }; \
+ static const Category_##error_name __category_##error_name; \

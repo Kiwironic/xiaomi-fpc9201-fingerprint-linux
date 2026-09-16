@@ -220,7 +220,7 @@ index ea82931..f89f274 100644
  }
  
 -bool merge(const cv::Mat& img1, const cv::Mat& mask1, const cv::Mat& img2, cv::Mat& output, cv::Mat& output_mask) 
-+bool merge_impl(const cv::Mat& img1, const cv::Mat& mask1, const cv::Mat& img2, cv::Mat& output, cv::Mat& output_mask) 
++bool merge_impl(const cv::Mat& img1, const cv::Mat& mask1, const cv::Mat& img2, cv::Mat& output, cv::Mat& output_mask)
  {
 +    if (img1.empty() or mask1.empty() or img2.empty()) {
 +        return false;
