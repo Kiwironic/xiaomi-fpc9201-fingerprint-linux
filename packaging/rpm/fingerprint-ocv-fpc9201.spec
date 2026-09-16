@@ -1,6 +1,6 @@
 Name:           fingerprint-ocv-fpc9201
 Version:        1.0.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Fingerprint driver for the FPC/Chipsailing 10a5:9201 sensor
 
 License:        AGPL-3.0-only
@@ -68,9 +68,13 @@ systemctl try-restart fprintd.service || :
 %doc README.md
 %{_libexecdir}/fingerpp
 /usr/lib/udev/rules.d/99-fpc9201.rules
+%dir %{_unitdir}/fprintd.service.d
 %{_unitdir}/fprintd.service.d/fingerpp.conf
 
 %changelog
+* Wed Sep 16 2026 Kiwironic <menabassily@hotmail.com> - 1.0.0-2
+- Own the fprintd.service.d drop-in directory (required on openSUSE)
+
 * Wed Sep 16 2026 Kiwironic <menabassily@hotmail.com> - 1.0.0-1
 - Initial package: vrolife/fingerprint-ocv plus crash, security and
   correctness fixes for the 10a5:9201 sensor

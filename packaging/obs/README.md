@@ -35,7 +35,8 @@ In the new package, **Add File** / **Upload File** for each of:
 | `debian.postrm` | `packaging/debian/postrm`, renamed |
 | `99-fpc9201.rules` | `packaging/debian/99-fpc9201.rules` |
 | `fingerpp.conf` | `packaging/debian/fingerpp.conf` |
-| `PKGBUILD` | `packaging/aur/PKGBUILD` — for the Arch target |
+| `PKGBUILD` | **`packaging/obs/PKGBUILD`** — the OBS variant (local source tarball; OBS builds have no network, so the AUR PKGBUILD's remote URL will not work) |
+| `fingerprint-ocv-fpc9201.install` | `packaging/aur/fingerprint-ocv-fpc9201.install` — referenced by the PKGBUILD's `install=` |
 
 ## 3. Enable build targets
 
@@ -52,15 +53,43 @@ OBS builds each target automatically and publishes a per-distro repo at
 add directly — including a **pacman repo for Arch**, which works around
 the closed AUR registration.
 
-## 4. If a target fails
+## 4. Disambiguate dependencies (one-time, expected)
 
-The **Monitor** page shows per-target status. Common first failures:
+The first build round will report **unresolvable** on most targets with
+`have choice for ...` errors — OBS refuses to guess between equivalent
+providers. Fix once in **Project Config** (project page → Advanced →
+Project Config), append:
 
-- `unresolvable: nothing provides opencv-devel` — the dep name differs
-  per distro; the spec already switches on `%suse_version`, but
-  Fedora/SUSE names may still need adjusting per target log
-- Debian target: missing `debian.rules` executable bit, or the
-  `.orig.tar.gz` name not matching `debian.changelog`'s version
+```
+Prefer: hdf-libs pipewire-jack-audio-connection-kit-libs
+Prefer: libavcodec59 libavformat59 libjpeg62-turbo-dev
+Prefer: libavcodec60 libavformat60
+Prefer: blas-openblas
+```
+
+Save → the unresolvable targets re-schedule themselves.
+
+Optional: remove non-x86_64 architectures (Repositories → each repo's
+arch list) — this sensor only ships in x86_64 laptops, and the extra
+i586/aarch64 builds just burn build time.
+
+## 5. If a target still fails
+
+The **Monitor** page shows per-target status. Known issues:
+
+- `directories not owned by a package: /usr/lib/systemd/system/fprintd.service.d`
+  — fixed in spec release 1.0.0-2; re-upload the spec
+- Debian target: `debian.rules` executable bit lost in web upload —
+  use `osc` to set it (below)
+- `unresolvable` that does NOT say `have choice` — a dep name differs
+  per distro; check the target's log details
+
+## 6. Add more distro coverage
+
+Same **Repositories → Add from a Distribution** step supports more
+targets — worth adding: `xUbuntu_25.04`, `Debian_13` (trixie),
+`Fedora_Rawhide`, `Arch_Core`. (Ubuntu 24.04 was chosen first as the
+current LTS; others are one tick-box each.)
 
 ## 5. Updating
 
