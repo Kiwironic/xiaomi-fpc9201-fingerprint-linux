@@ -1,0 +1,32 @@
+diff --git a/src/drv_fpc/fpc9201.cpp b/src/drv_fpc/fpc9201.cpp
+index 7b1b33d..e587ff9 100644
+--- a/src/drv_fpc/fpc9201.cpp
++++ b/src/drv_fpc/fpc9201.cpp
+@@ -679,6 +679,7 @@ class WorkerDevice : public AsyncDBusObject {
+     AsyncDBusSend _send_message{};
+     AsyncDBusSendWithReply _send_with_reply{};
+     Queue<std::queue<FPCEvent>>::Put _put_image{};
++    Queue<std::queue<FPCEvent>>::Put _put_event{};
+ 
+     // Polkit authorization gate state, keyed by "<sender>:<serial>" of the
+     // gated call (serials are per-connection, so the sender must be part of
+@@ -1117,12 +1118,18 @@ protected:
+             if (_enroll_verify_task != nullptr) {
+                 async_cancel(_enroll_verify_task) >> JINX_IGNORE_RESULT;
+                 _enroll_verify_task.reset();
++                // A cancelled task can leave a pending Get on _image_queue;
++                // clear it so a later Put cannot wake a dead awaitable
++                // (PendingGetError).
++                _image_queue->reset();
+             }
+             drop_auth_gates(old_owner);
+             _claimed = false;
+             _claimed_sender.clear();
+             _claimed_user.clear();
+-            return send_enroll_stop();
++            // The cancelled task cannot consume EnrollVerifyStop, so stop
++            // the sensor directly (no-op if it was already idle).
++            return *this / _put_event(_event_queue, FPCEvent{FPCEvent::FPP_StopSensor, {}, {}}) / &WorkerDevice::run;
+         }
+ 
+         return run();
