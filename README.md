@@ -10,6 +10,14 @@ driver that reverse-engineered the sensor — with a set of crash, security and
 correctness fixes on top, installed as a drop-in replacement for the normal
 fingerprint service.
 
+Because it claims the standard fprintd interface, the desktop treats it as a
+native fingerprint reader — enroll from Settings, log in at the lock screen,
+and use it for `sudo`:
+
+| GNOME Settings → Users → Fingerprint Login | `sudo` in a terminal (Fedora 44) |
+|:-:|:-:|
+| ![Fingerprint enrollment in GNOME Settings](screenshots/settings-fingerprint.png) | ![sudo asking for a fingerprint](screenshots/sudo-prompt.png) |
+
 ## Is this your sensor?
 
 ```bash
