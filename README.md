@@ -62,12 +62,21 @@ are unrelated to this driver and are not made to work by it.
 
 ### Packages (Fedora / Arch)
 
-Prebuilt packages live in [packaging/](packaging/) — a COPR repo for Fedora
-and an AUR package for Arch, both built from the tagged releases of
+Prebuilt packages are built from the tagged releases of
 [Kiwironic/fingerprint-ocv](https://github.com/Kiwironic/fingerprint-ocv)
-(this project's patched fork of the upstream driver). See
-[packaging/README.md](packaging/README.md) for the repo addresses once
-published.
+(this project's patched fork of the upstream driver). Packaging sources
+live in [packaging/](packaging/).
+
+**Fedora** — COPR [`kiwir0nic/fingerprint-ocv-fpc9201`](https://copr.fedorainfracloud.org/coprs/kiwir0nic/fingerprint-ocv-fpc9201/):
+
+```bash
+sudo dnf copr enable kiwir0nic/fingerprint-ocv-fpc9201
+sudo dnf install fingerprint-ocv-fpc9201
+```
+
+**Arch** — the `fingerprint-ocv-fpc9201` AUR package is prepared in
+[packaging/aur/](packaging/aur/) and will be published once AUR account
+registration reopens; until then use `makepkg -si` in that directory.
 
 ### From source
 

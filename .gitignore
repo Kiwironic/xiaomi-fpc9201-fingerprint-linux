@@ -21,3 +21,7 @@ __pycache__/
 # Secrets - never commit tokens or credentials
 .config/
 *.secret
+
+# Packaging build artifacts
+packaging/rpm/*.src.rpm
+packaging/rpm/*.tar.gz

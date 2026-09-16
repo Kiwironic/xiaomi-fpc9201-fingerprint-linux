@@ -24,7 +24,7 @@ configuration. Enrollment data is stored in /var/lib/fprint.
 
 %build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j%{?_smp_mflags}
+cmake --build build %{?_smp_mflags}
 
 %install
 install -Dm755 build/src/fingerprint-ocv %{buildroot}%{_libexecdir}/fingerpp
