@@ -17,3 +17,7 @@ __pycache__/
 # Local logs and scratch
 *.log
 /tmp/
+
+# Secrets - never commit tokens or credentials
+.config/
+*.secret
