@@ -1,0 +1,4 @@
+theme: jekyll-theme-cayman
+title: FPC9201 fingerprint on Linux
+description: Driver, patches and packaging for the FPC/Chipsailing 10a5:9201 fingerprint sensor (Xiaomi Book Pro 14 2022 and relatives)
+show_downloads: false
